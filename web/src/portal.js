@@ -16,7 +16,7 @@ const TYPE_STYLE = {
 
 export function renderPortal(root, data, { onSignOut }) {
   const { user, systems = [] } = data;
-  const state = { query: '', group: 'All' };
+  const state = { query: '', group: 'All', open: new Set() };
 
   const groups = orderGroups([...new Set(systems.map((s) => s.group))]);
   const linkCount = systems.reduce((n, s) => n + s.links.length, 0);
@@ -71,28 +71,58 @@ export function renderPortal(root, data, { onSignOut }) {
       main.replaceChildren(h('p', { class: 'empty' }, 'Nothing matches your search.'));
       return;
     }
+    // While searching, every matching card opens so the hits are visible.
+    const isOpen = (s) => Boolean(state.query) || state.open.has(s.id);
+    const allOpen = shown.every(isOpen);
+    const toggleAll = h('button', {
+      type: 'button', class: 'toolbar-btn',
+      onclick: () => {
+        shown.forEach((s) => (allOpen ? state.open.delete(s.id) : state.open.add(s.id)));
+        draw();
+      },
+    }, allOpen ? 'Collapse all' : 'Expand all');
+
     main.replaceChildren(
+      h('div', { class: 'toolbar' },
+        h('span', {}, `${shown.length} ${shown.length === 1 ? 'system' : 'systems'}`),
+        !state.query && toggleAll),
       ...groups
         .map((g) => [g, shown.filter((s) => s.group === g)])
         .filter(([, list]) => list.length)
         .map(([g, list]) => h('section', { class: 'group' },
           h('h2', {}, g),
-          h('div', { class: 'cards' }, list.map(systemCard)))),
+          h('div', { class: 'cards' }, list.map((s) => systemCard(s, isOpen(s), state.open))))),
     );
   }
 
   draw();
 }
 
-function systemCard(sys) {
+// A card starts collapsed: name, link count and a chevron. Tap to open.
+function systemCard(sys, open, openSet) {
   const inactive = sys.lifecycle.toLowerCase() !== 'active';
   const blurb = sys.task || sys.purpose;
-  return h('article', { class: `card-sys${inactive ? ' inactive' : ''}` },
-    h('div', { class: 'card-head' },
-      h('h3', {}, sys.name),
-      inactive && h('span', { class: 'badge' }, 'Inactive')),
-    blurb && h('p', { class: 'blurb' }, blurb),
-    h('ul', { class: 'links' }, sys.links.map((l) => h('li', {}, linkButton(sys, l)))));
+  const n = sys.links.length;
+  const card = h('article', { class: `card-sys${inactive ? ' inactive' : ''}${open ? ' open' : ''}` });
+  const head = h('button', {
+    type: 'button', class: 'card-head', 'aria-expanded': String(open),
+    onclick: () => {
+      const nowOpen = !card.classList.contains('open');
+      card.classList.toggle('open', nowOpen);
+      head.setAttribute('aria-expanded', String(nowOpen));
+      nowOpen ? openSet.add(sys.id) : openSet.delete(sys.id);
+    },
+  },
+  h('span', { class: 'card-title' }, sys.name),
+  h('span', { class: 'card-meta' },
+    inactive && h('span', { class: 'badge' }, 'Inactive'),
+    h('span', { class: 'count-pill' }, `${n} ${n === 1 ? 'link' : 'links'}`),
+    h('span', { class: 'chev', 'aria-hidden': 'true' }, '›')));
+  card.append(head,
+    h('div', { class: 'card-body' },
+      blurb && h('p', { class: 'blurb' }, blurb),
+      h('ul', { class: 'links' }, sys.links.map((l) => h('li', {}, linkButton(sys, l))))));
+  return card;
 }
 
 function linkButton(sys, link) {

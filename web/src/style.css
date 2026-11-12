@@ -107,8 +107,21 @@ h1 {
 .cards { display: grid; gap: 12px; grid-template-columns: 1fr; }
 .card-sys { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
 .card-sys.inactive { opacity: 0.75; border-style: dashed; }
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.card-head h3 { margin: 0; font-size: 17px; font-weight: 600; color: var(--navy); }
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+.toolbar-btn { background: none; border: 0; padding: 8px 0; font: inherit; font-size: 14px; font-weight: 500; color: var(--navy); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.card-sys { padding: 0; align-self: start; }
+.card-head {
+  width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 14px; background: none; border: 0; font: inherit; text-align: left; cursor: pointer;
+}
+.card-title { font-size: 16.5px; font-weight: 600; color: var(--navy); }
+.card-meta { display: flex; align-items: center; gap: 6px; flex: none; }
+.count-pill { font-size: 12px; color: var(--muted); background: var(--cream); border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px; }
+.chev { font-size: 22px; line-height: 1; color: var(--gold-dark); transition: transform 0.15s; }
+.card-sys.open .chev { transform: rotate(90deg); }
+.card-body { display: none; padding: 0 14px 14px; }
+.card-sys.open .card-body { display: block; }
+.card-sys.open .blurb { margin-top: 0; }
 .badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: #EEE; color: var(--muted); }
 .blurb {
   margin: 6px 0 10px; font-size: 13.5px; color: var(--muted); line-height: 1.45;
