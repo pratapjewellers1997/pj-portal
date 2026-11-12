@@ -13,6 +13,7 @@
  * Actions (Step 1):
  *   login  {idToken}  -> {ok, session, user}
  *   me     {session}  -> {ok, user}
+ *   portal {session}  -> {ok, user, systems, generatedAt}   (Step 2)
  */
 
 function doGet() {
@@ -25,6 +26,7 @@ function doPost(e) {
     switch (req.action) {
       case 'login': return json_(actionLogin_(req));
       case 'me':    return json_(actionMe_(req));
+      case 'portal': return json_(actionPortal_(req));
       default:      throw apiError_('unknown_action');
     }
   } catch (err) {
@@ -44,6 +46,13 @@ function actionLogin_(req) {
 function actionMe_(req) {
   var email = readSession_(req.session);
   return { ok: true, user: findPerson_(email) };
+}
+
+function actionPortal_(req) {
+  var email = readSession_(req.session);
+  var user = findPerson_(email);
+  var portal = buildPortal_(user);
+  return { ok: true, user: user, systems: portal.systems, generatedAt: portal.generatedAt };
 }
 
 function apiError_(code) {

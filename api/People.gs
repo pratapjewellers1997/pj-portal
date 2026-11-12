@@ -59,6 +59,7 @@ function findPerson_(email) {
     if (PORTAL_ROLES.indexOf(p.role) === -1) throw apiError_('not_registered');
     return {
       email: email,
+      emails: p.emails,
       name: p.name,
       designation: p.designation,
       role: p.role,

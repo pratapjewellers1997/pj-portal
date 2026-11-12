@@ -1,11 +1,17 @@
 import './style.css';
 import { callApi } from './api.js';
+import { h } from './dom.js';
+import { renderPortal } from './portal.js';
 
-// Step 1: sign-in test. Shows who the API says you are.
+// Flow: sign in with Google -> API checks -> portal session (7 days)
+// -> "portal" call returns this person's systems and links from the Feed.
+// The last portal result is kept on the phone so it opens instantly,
+// then refreshes in the background.
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SESSION_KEY = 'pj_session';
-const view = document.getElementById('view');
+const CACHE_KEY = 'pj_portal_cache';
+const root = document.getElementById('root');
 
 const MESSAGES = {
   not_registered: 'This Google account is not in the staff list. Ask MIS (Rohan) to add it.',
@@ -19,71 +25,73 @@ const MESSAGES = {
   network_error: 'Could not reach the portal server. Check your internet.',
   server_error: 'Something went wrong on the server. Please try again.',
 };
+const SESSION_ERRORS = ['no_session', 'session_expired', 'not_registered', 'inactive'];
 
-function getSession() {
-  try { return localStorage.getItem(SESSION_KEY); } catch { return null; }
-}
-function setSession(s) {
-  try { s ? localStorage.setItem(SESSION_KEY, s) : localStorage.removeItem(SESSION_KEY); } catch {}
-}
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+};
 
-function el(tag, attrs = {}, text) {
-  const node = document.createElement(tag);
-  Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
-  if (text != null) node.textContent = text;
-  return node;
-}
-
-function showError(code) {
-  const p = el('p', { class: 'error' }, MESSAGES[code] || MESSAGES.server_error);
-  view.prepend(p);
+function signOut() {
+  store.set(SESSION_KEY, null);
+  store.set(CACHE_KEY, null);
+  if (window.google?.accounts?.id) google.accounts.id.disableAutoSelect();
+  renderSignIn();
 }
 
 function renderSignIn(errorCode) {
-  view.replaceChildren();
-  view.append(el('p', { class: 'muted' }, 'Sign in with your Google account (company or Gmail).'));
-  const btn = el('div', { id: 'gbtn' });
-  view.append(btn);
-  if (errorCode) showError(errorCode);
+  const btn = h('div', { id: 'gbtn' });
+  root.replaceChildren(
+    h('main', { class: 'shell' },
+      h('section', { class: 'card', 'aria-live': 'polite' },
+        h('div', { class: 'brand' },
+          h('div', { class: 'monogram', 'aria-hidden': 'true' }, 'PJ'),
+          h('div', {}, h('h1', {}, 'Pratap Jewellers'), h('p', { class: 'sub' }, 'Staff portal'))),
+        errorCode && h('p', { class: 'error' }, MESSAGES[errorCode] || MESSAGES.server_error),
+        h('p', { class: 'muted' }, 'Sign in with your Google account (company or Gmail).'),
+        btn),
+      h('p', { class: 'foot' }, 'For Pratap Jewellers staff only')));
+
+  if (!CLIENT_ID) return;
   waitForGoogle().then(() => {
-    google.accounts.id.initialize({
-      client_id: CLIENT_ID,
-      callback: onGoogleCredential,
-      ux_mode: 'popup',
-    });
+    google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onGoogleCredential, ux_mode: 'popup' });
     google.accounts.id.renderButton(btn, {
       theme: 'filled_blue', size: 'large', shape: 'pill', text: 'signin_with', width: 280,
     });
   });
 }
 
-function renderUser(user) {
-  view.replaceChildren();
-  const box = el('div', { class: 'who' });
-  box.append(el('p', { class: 'hello' }, `Namaste, ${user.name || user.email}`));
-  const dl = el('dl');
-  [['Email', user.email], ['Role', user.role], ['Designation', user.designation || '—']]
-    .forEach(([k, v]) => { dl.append(el('dt', {}, k), el('dd', {}, v)); });
-  box.append(dl);
-  box.append(el('p', { class: 'ok' }, 'Sign-in test passed. The API checked your Google account.'));
-  const out = el('button', { class: 'ghost', type: 'button' }, 'Sign out');
-  out.addEventListener('click', () => {
-    setSession(null);
-    if (window.google?.accounts?.id) google.accounts.id.disableAutoSelect();
-    renderSignIn();
-  });
-  box.append(out);
-  view.append(box);
+function renderLoading(text) {
+  root.replaceChildren(h('main', { class: 'shell' }, h('section', { class: 'card' }, h('p', { class: 'muted' }, text))));
 }
 
 async function onGoogleCredential(response) {
-  view.replaceChildren(el('p', { class: 'muted' }, 'Checking your account…'));
+  renderLoading('Checking your account…');
   try {
     const data = await callApi('login', { idToken: response.credential });
-    setSession(data.session);
-    renderUser(data.user);
+    store.set(SESSION_KEY, data.session);
+    await loadPortal(data.session, null);
   } catch (err) {
     renderSignIn(err.message);
+  }
+}
+
+async function loadPortal(session, cached) {
+  try {
+    const data = await callApi('portal', { session });
+    store.set(CACHE_KEY, JSON.stringify(data));
+    // Don't redraw (and wipe a search being typed) if nothing changed.
+    const same = cached && JSON.stringify(cached.systems) === JSON.stringify(data.systems)
+      && JSON.stringify(cached.user) === JSON.stringify(data.user);
+    if (!same) renderPortal(root, data, { onSignOut: signOut });
+  } catch (err) {
+    if (SESSION_ERRORS.includes(err.message)) {
+      store.set(SESSION_KEY, null);
+      store.set(CACHE_KEY, null);
+      renderSignIn(err.message === 'no_session' ? null : err.message);
+    } else if (!cached) {
+      renderSignIn(err.message);
+    } // else: keep showing the cached portal (e.g. phone is offline)
   }
 }
 
@@ -94,17 +102,16 @@ function waitForGoogle() {
   });
 }
 
-async function start() {
+function start() {
   if (!CLIENT_ID) { renderSignIn('config_missing'); return; }
-  const session = getSession();
+  const session = store.get(SESSION_KEY);
   if (!session) { renderSignIn(); return; }
-  try {
-    const data = await callApi('me', { session });
-    renderUser(data.user);
-  } catch (err) {
-    setSession(null);
-    renderSignIn(err.message === 'no_session' ? null : err.message);
-  }
+
+  let cached = null;
+  try { cached = JSON.parse(store.get(CACHE_KEY) || 'null'); } catch {}
+  if (cached?.user) renderPortal(root, cached, { onSignOut: signOut });
+  else renderLoading('Loading your portal…');
+  loadPortal(session, cached);
 }
 
 start();
