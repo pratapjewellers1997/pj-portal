@@ -587,7 +587,7 @@ function reconcileFms_(tasks, dv) {
     if (String(r[ck] || '').trim()) db[keyOf(r[ck], r[cs])] = String(r[ck]).trim() + ' / ' + String(r[cs] || '').trim();
   });
   tasks.forEach(function (t) {
-    if (!t.d && t.p <= endToday) portal[keyOf(t.k, t.t)] = t.k + ' / ' + t.t;
+    if (!t.d) portal[keyOf(t.k, t.t)] = t.k + ' / ' + t.t;   // DB_Format also lists future next steps
   });
   var missing = Object.keys(db).filter(function (k) { return !portal[k]; }).map(function (k) { return db[k]; });
   var extra = Object.keys(portal).filter(function (k) { return !db[k]; }).map(function (k) { return portal[k]; });
@@ -814,11 +814,11 @@ function refreshActivity_(force) {
 
   var sheet = SpreadsheetApp.openById(cfg_('REGISTRY_ID')).getSheetByName('Links');
   var rows = sheet.getDataRange().getDisplayValues();
-  var h = lowerRow_(rows[0]), cU = h.indexOf('url'), cS = h.indexOf('system id');
+  var h = lowerRow_(rows[0]), cU = h.indexOf('url'), cS = h.indexOf('system id'), cL = h.indexOf('label');
   var ids = {};
   rows.slice(1).forEach(function (r) {
     var m = String(r[cU] || '').match(/docs\.google\.com\/spreadsheets\/d\/([\w-]{20,})(\/(copy))?/);
-    if (m && !m[3]) (ids[m[1]] = ids[m[1]] || []).push(r[cS]);
+    if (m && !m[3]) { (ids[m[1]] = ids[m[1]] || []).push(r[cS]); ids[m[1]].label = ids[m[1]].label || r[cL]; }
   });
 
   var files = [], errors = [];
@@ -827,7 +827,7 @@ function refreshActivity_(force) {
       var f = Drive.Files.get(id, { fields: 'name,modifiedTime,lastModifyingUser(displayName)', supportsAllDrives: true });
       files.push({ id: id, name: f.name, t: Date.parse(f.modifiedTime),
                    by: (f.lastModifyingUser && f.lastModifyingUser.displayName) || '', sys: ids[id] });
-    } catch (e) { errors.push(ids[id][0] || id); }
+    } catch (e) { errors.push('"' + (ids[id].label || id) + '" (' + ids[id].join('/') + ')'); }
   });
   var data = { builtAt: Date.now(), files: files, errors: errors };
   try { props.setProperty(ACTIVITY_KEY, JSON.stringify(data)); } catch (e) { console.warn('Activity too big to store: ' + e); }
