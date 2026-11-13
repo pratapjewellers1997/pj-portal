@@ -14,6 +14,7 @@
  *   login  {idToken}  -> {ok, session, user}
  *   me     {session}  -> {ok, user}
  *   portal {session}  -> {ok, user, systems, generatedAt}   (Step 2)
+ *   work   {session, from, to, person?} -> {ok, tasks, attendance, …}  (Step 3)
  */
 
 function doGet() {
@@ -27,6 +28,7 @@ function doPost(e) {
       case 'login': return json_(actionLogin_(req));
       case 'me':    return json_(actionMe_(req));
       case 'portal': return json_(actionPortal_(req));
+      case 'work':   return json_(actionWork_(req));
       default:      throw apiError_('unknown_action');
     }
   } catch (err) {
