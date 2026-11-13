@@ -15,6 +15,7 @@
  *   me     {session}  -> {ok, user}
  *   portal {session}  -> {ok, user, systems, generatedAt}   (Step 2)
  *   work   {session, from, to, person?} -> {ok, tasks, attendance, …}  (Step 3)
+ *   lookup {session, q}  -> {ok, items: [{system, key, label, steps}]}  (Step 6)
  */
 
 function doGet() {
@@ -29,6 +30,7 @@ function doPost(e) {
       case 'me':    return json_(actionMe_(req));
       case 'portal': return json_(actionPortal_(req));
       case 'work':   return json_(actionWork_(req));
+      case 'lookup': return json_(actionLookup_(req));
       default:      throw apiError_('unknown_action');
     }
   } catch (err) {

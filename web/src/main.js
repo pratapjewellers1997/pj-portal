@@ -44,9 +44,9 @@ function renderSignIn(errorCode) {
   root.replaceChildren(
     h('main', { class: 'shell' },
       h('section', { class: 'card', 'aria-live': 'polite' },
-        h('div', { class: 'brand' },
-          h('div', { class: 'monogram', 'aria-hidden': 'true' }, 'PJ'),
-          h('div', {}, h('h1', {}, 'Pratap Jewellers'), h('p', { class: 'sub' }, 'Staff portal'))),
+        h('div', { class: 'brand brand-logo' },
+          h('img', { src: './brand/logo-full.png', alt: 'Pratap Jewellers', class: 'logo-full', width: '220', height: '255' }),
+          h('p', { class: 'sub' }, 'Staff portal')),
         errorCode && h('p', { class: 'error' }, MESSAGES[errorCode] || MESSAGES.server_error),
         h('p', { class: 'muted' }, 'Sign in with your Google account (company or Gmail).'),
         btn),

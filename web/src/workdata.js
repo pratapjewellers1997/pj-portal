@@ -109,3 +109,29 @@ export const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
 export function loadingBox(text) {
   return h('div', { class: 'loading' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), text);
 }
+
+// ---------- One-tap "Mark done" (opens the step's own pre-filled Google Form) ----------
+// The form is submitted to Google Forms directly, exactly as staff do today.
+// The portal sends nothing to the API: the step turns "done" at the next
+// 10-minute refresh, once the FMS sheet has recorded the form.
+
+const MARKED_KEY = 'pj_marked';
+const markedSet = () => { try { return new Set(JSON.parse(sessionStorage.getItem(MARKED_KEY) || '[]')); } catch { return new Set(); } };
+
+export function markButton(t) {
+  const isOpen = t.status === 'overdue' || t.status === 'due';
+  let url = null;
+  try { url = t.mark && new URL(t.mark).hostname === 'docs.google.com' ? t.mark : null; } catch { url = null; }
+  if (!isOpen || !url) return null;
+  const id = `${t.sys}|${t.key}|${t.task}`;
+  const note = h('span', { class: 'mark-note' }, 'Form opened · shows as done within ~10 min');
+  const btn = h('a', {
+    class: 'btn-mark', href: url, target: '_blank', rel: 'noopener',
+    onclick: () => {
+      const s = markedSet(); s.add(id);
+      try { sessionStorage.setItem(MARKED_KEY, JSON.stringify([...s])); } catch {}
+      btn.replaceWith(note);
+    },
+  }, '✓ Mark done');
+  return markedSet().has(id) ? note : btn;
+}

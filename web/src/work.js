@@ -1,6 +1,6 @@
 import { h, safeUrl } from './dom.js';
 import {
-  loadWork, dateBar, selectBox, tile, fmtDateTime, pct, presetRange, loadingBox, ERRORS,
+  loadWork, dateBar, selectBox, tile, fmtDateTime, pct, presetRange, loadingBox, ERRORS, markButton,
 } from './workdata.js';
 
 // Work page: tasks from every FMS, both checklists and the Delegation Sheet.
@@ -145,7 +145,9 @@ function taskItem(t, isDoer, user, nameOf) {
     (!isDoer || others.length) && t.who.length
       ? h('div', { class: 'task-who' }, t.who.map(nameOf).join(', '))
       : (!t.who.length && h('div', { class: 'task-who warn' }, 'Not assigned to anyone')),
-    url && h('a', { class: 'task-open', href: url, target: '_blank', rel: 'noopener' }, 'Open in sheet ↗'));
+    h('div', { class: 'task-actions' },
+      markButton(t),
+      url && h('a', { class: 'task-open', href: url, target: '_blank', rel: 'noopener' }, 'Open in sheet ↗')));
 }
 
 function groupBy(tasks, by, people = [], nameOf = (x) => x) {

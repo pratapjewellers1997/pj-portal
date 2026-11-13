@@ -125,6 +125,7 @@ function actionWork_(req) {
   }).map(function (t) {
     return {
       sys: t.s, system: t.n, type: t.y, key: t.k, label: t.l, task: t.t, freq: t.f || '',
+      step: t.i == null ? null : t.i, mark: t.m || '',
       planned: t.p, actual: t.a, who: t.w, url: (data.bases[t.b] || '') + t.u, carry: t.p < range.from,
       status: t.d ? (t.o === true ? 'on_time' : t.o === false ? 'late' : 'done') : (t.p < now ? 'overdue' : 'due')
     };
@@ -155,6 +156,48 @@ function actionWork_(req) {
   }
   if (user.role === 'Admin') out.health = data.health;
   return out;
+}
+
+/**
+ * lookup {session, q}: find a customer, order or item across every FMS and the
+ * Delegation Sheet. Returns up to 30 items, each with all its steps in order.
+ * A Doer only sees items where one of the steps is theirs.
+ */
+function actionLookup_(req) {
+  var user = findPerson_(readSession_(req.session));
+  var words = normName_(req.q || '').split(' ').filter(function (w) { return w.length > 0; });
+  if (!words.length || normName_(req.q).length < 2) throw apiError_('query_too_short');
+  var data = loadSnapshot_() || buildSnapshotLocked_(60000) || loadSnapshot_();
+  if (!data) throw apiError_('busy');
+  var isDoer = user.role === 'Doer', now = Date.now();
+
+  var items = {};
+  data.tasks.forEach(function (t) {
+    if (t.y === 'Checklist') return;
+    var hay = normName_(t.k + ' ' + t.l + ' ' + (t.y === 'Delegation' ? t.t : ''));
+    for (var i = 0; i < words.length; i++) if (hay.indexOf(words[i]) === -1) return;
+    var id = t.s + '|' + t.k;
+    var it = items[id] = items[id] || { sys: t.s, system: t.n, type: t.y, key: t.k, label: t.l, steps: [], mine: false };
+    if (t.w.some(function (e) { return user.emails.indexOf(e) > -1; })) it.mine = true;
+    it.steps.push({
+      task: t.t, step: t.i == null ? null : t.i, planned: t.p, actual: t.a, who: t.w,
+      url: (data.bases[t.b] || '') + t.u, mark: t.m || '',
+      status: t.d ? (t.o === true ? 'on_time' : t.o === false ? 'late' : 'done') : (t.p < now ? 'overdue' : 'due')
+    });
+  });
+  var list = Object.keys(items).map(function (k) { return items[k]; })
+    .filter(function (it) { return !isDoer || it.mine; });
+  list.forEach(function (it) {
+    it.steps.sort(function (a, b) { return (a.step == null ? 0 : a.step) - (b.step == null ? 0 : b.step) || a.planned - b.planned; });
+    it.last = Math.max.apply(null, it.steps.map(function (s) { return s.actual || s.planned; }));
+    it.open = it.steps.filter(function (s) { return s.status === 'overdue' || s.status === 'due'; }).length;
+    delete it.mine;
+  });
+  list.sort(function (a, b) { return b.open - a.open || b.last - a.last; });
+
+  var names = {};
+  loadPeople_(false).forEach(function (p) { p.emails.forEach(function (e) { names[e] = p.name; }); });
+  return { ok: true, q: req.q, total: list.length, items: list.slice(0, 30), names: names, builtAt: data.builtAt };
 }
 
 function parseRange_(from, to) {
@@ -482,13 +525,15 @@ function parseFms_(src, book, names, cutoff, horizon) {
     if (r[0] && r[1]) stepDoer[normName_(r[0])] = [normaliseEmail_(r[1])];
   });
   // DB_Format = the open steps with their FINAL doer (same column Data Studio filters on)
-  var finalDoer = {};
+  var finalDoer = {}, markLink = {};
   var dv = book.tabs['DB_Format'] || [];
   if (dv.length > 1) {
     var dh = lowerRow_(dv[0]);
-    var ck = dh.indexOf('unique key'), cs = dh.indexOf('step'), cf = dh.indexOf('final doer email');
-    if (ck > -1 && cs > -1 && cf > -1) dv.slice(1).forEach(function (r) {
-      if (r[cf]) finalDoer[String(r[ck] || '').trim() + '|' + normName_(r[cs])] = normaliseEmail_(r[cf]);
+    var ck = dh.indexOf('unique key'), cs = dh.indexOf('step'), cf = dh.indexOf('final doer email'), cl = dh.indexOf('link');
+    if (ck > -1 && cs > -1) dv.slice(1).forEach(function (r) {
+      var dk = String(r[ck] || '').trim() + '|' + normName_(r[cs]);
+      if (cf > -1 && r[cf]) finalDoer[dk] = normaliseEmail_(r[cf]);
+      if (cl > -1 && /^https:\/\/docs\.google\.com\/forms\//.test(String(r[cl] || ''))) markLink[dk] = String(r[cl]);
     });
   }
 
@@ -501,7 +546,7 @@ function parseFms_(src, book, names, cutoff, horizon) {
     if (lastNameCol > -1 && labels[labelCols[0]] === 'customer first name' && row[lastNameCol]) {
       label = (label + ' ' + String(row[lastNameCol]).trim()).trim();
     }
-    steps.forEach(function (st) {
+    steps.forEach(function (st, si) {
       var p = toMs_(row[st.planned]);
       if (!p) return;                                    // step not reached yet
       var a = toMs_(row[st.actual]);
@@ -515,8 +560,10 @@ function parseFms_(src, book, names, cutoff, horizon) {
         if (!who.length) who = stepDoer[normName_(st.name)] || [];
         if (!who.length && st.who) who = resolveNames_(st.who, names);
       }
-      out.push({ s: src.sysId, n: src.system, y: 'FMS', k: key || 'Row ' + (r + 1), l: label,
-                 t: st.name, p: p, a: a, d: Boolean(a), o: a ? a <= p : null, w: who, u: r + 1 });
+      var t = { s: src.sysId, n: src.system, y: 'FMS', k: key || 'Row ' + (r + 1), l: label,
+                t: st.name, p: p, a: a, d: Boolean(a), o: a ? a <= p : null, w: who, u: r + 1, i: si };
+      if (!a && markLink[key + '|' + normName_(st.name)]) t.m = markLink[key + '|' + normName_(st.name)];
+      out.push(t);
     });
   }
   out.check = reconcileFms_(out, dv);

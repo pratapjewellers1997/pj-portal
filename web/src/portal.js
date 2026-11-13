@@ -1,6 +1,8 @@
 import { h, safeUrl, isPhone } from './dom.js';
 import { renderWork } from './work.js';
 import { renderAttendance } from './attendance.js';
+import { renderBoard } from './board.js';
+import { renderScores } from './scores.js';
 import { loadWork, ymd } from './workdata.js';
 
 // Function groups in the order agreed in the hand-off.
@@ -21,6 +23,8 @@ const TYPE_STYLE = {
 const PAGES = [
   { id: 'systems', label: 'Systems' },
   { id: 'work', label: 'Work' },
+  { id: 'board', label: 'Board' },
+  { id: 'scores', label: 'Scores' },
   { id: 'attendance', label: 'Attendance' },
 ];
 
@@ -33,7 +37,7 @@ export function renderPortal(root, data, { onSignOut, session }) {
   root.replaceChildren(
     h('header', { class: 'top' },
       h('div', { class: 'top-brand' },
-        h('div', { class: 'monogram sm', 'aria-hidden': 'true' }, 'PJ'),
+        h('img', { src: './brand/monogram.png', alt: '', class: 'logo-mono', width: '40', height: '40' }),
         h('div', {}, h('div', { class: 'top-name' }, 'Pratap Jewellers'), h('div', { class: 'top-sub' }, 'Staff portal'))),
       h('div', { class: 'top-user' },
         h('span', { class: `role role-${user.role.toLowerCase()}` }, user.role),
@@ -50,6 +54,8 @@ export function renderPortal(root, data, { onSignOut, session }) {
       'aria-current': p.id === page.id ? 'page' : null,
     }, p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
     if (page.id === 'work') renderWork(view, ctx);
+    else if (page.id === 'board') renderBoard(view, ctx);
+    else if (page.id === 'scores') renderScores(view, ctx);
     else if (page.id === 'attendance') renderAttendance(view, ctx);
     else renderSystems(view, data, ctx);
     window.scrollTo(0, 0);
