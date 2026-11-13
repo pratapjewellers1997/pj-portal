@@ -3,6 +3,7 @@ import { renderWork } from './work.js';
 import { renderAttendance } from './attendance.js';
 import { renderBoard } from './board.js';
 import { renderScores } from './scores.js';
+import { renderProfile } from './profile.js';
 import { loadWork, ymd } from './workdata.js';
 
 // Function groups in the order agreed in the hand-off.
@@ -47,7 +48,14 @@ export function renderPortal(root, data, { onSignOut, session }) {
   );
 
   function route() {
-    const id = (location.hash || '#systems').slice(1);
+    const [id, param] = (location.hash || '#systems').slice(1).split('/');
+    if (id === 'person') {
+      tabs.replaceChildren(...PAGES.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
+        p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
+      renderProfile(view, ctx, decodeURIComponent(param || ''));
+      window.scrollTo(0, 0);
+      return;
+    }
     const page = PAGES.find((p) => p.id === id) || PAGES[0];
     tabs.replaceChildren(...PAGES.map((p) => h('a', {
       href: `#${p.id}`, class: `tab${p.id === page.id ? ' on' : ''}`,
@@ -265,7 +273,9 @@ function todayCard(ctx) {
     }
     box.replaceChildren(
       h('div', { class: 'today-head' }, h('strong', {}, isDoer ? 'Your day' : 'Team today'),
-        h('a', { href: '#work', class: 'today-link' }, isDoer ? 'Open my work →' : 'Open work →')),
+        h('span', { class: 'today-links' },
+          isDoer && h('a', { href: '#person/', class: 'today-link' }, 'My profile'),
+          h('a', { href: '#work', class: 'today-link' }, isDoer ? 'Open my work →' : 'Open work →'))),
       h('div', { class: 'today-stats' }, parts));
   }).catch(() => box.remove());
   return box;

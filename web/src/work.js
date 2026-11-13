@@ -186,7 +186,10 @@ function summaryTable(title, rows, onPick) {
           onclick: () => onPick(r.key),
           onkeydown: (e) => { if (e.key === 'Enter') onPick(r.key); },
         },
-        h('td', {}, r.label), h('td', {}, r.assigned), h('td', {}, r.done),
+        h('td', {}, r.label, r.key && r.key.includes('@') && h('a', {
+          href: `#person/${encodeURIComponent(r.key)}`, class: 'profile-mini', onclick: (e) => e.stopPropagation(),
+          'aria-label': `Open ${r.label}'s profile`,
+        }, 'Profile →')), h('td', {}, r.assigned), h('td', {}, r.done),
         h('td', {}, pct(r.onTime, r.timed)),
         h('td', { class: r.overdue ? 'num-red' : '' }, r.overdue)))))));
 }
