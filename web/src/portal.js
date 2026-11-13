@@ -4,6 +4,7 @@ import { renderAttendance } from './attendance.js';
 import { renderBoard } from './board.js';
 import { renderScores } from './scores.js';
 import { renderProfile } from './profile.js';
+import { renderInsights, celebrationsBox } from './insights.js';
 import { loadWork, ymd } from './workdata.js';
 
 // Function groups in the order agreed in the hand-off.
@@ -26,11 +27,13 @@ const PAGES = [
   { id: 'work', label: 'Work' },
   { id: 'board', label: 'Board' },
   { id: 'scores', label: 'Scores' },
+  { id: 'insights', label: 'Insights', notFor: 'Doer' },
   { id: 'attendance', label: 'Attendance' },
 ];
 
 export function renderPortal(root, data, { onSignOut, session }) {
   const { user } = data;
+  const pages = PAGES.filter((p) => p.notFor !== user.role);
   const view = h('div', { class: 'view' });
   const tabs = h('nav', { class: 'tabs', 'aria-label': 'Portal pages' });
   const ctx = { user, session, onSignOut };
@@ -50,20 +53,21 @@ export function renderPortal(root, data, { onSignOut, session }) {
   function route() {
     const [id, param] = (location.hash || '#systems').slice(1).split('/');
     if (id === 'person') {
-      tabs.replaceChildren(...PAGES.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
+      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
         p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
       renderProfile(view, ctx, decodeURIComponent(param || ''));
       window.scrollTo(0, 0);
       return;
     }
-    const page = PAGES.find((p) => p.id === id) || PAGES[0];
-    tabs.replaceChildren(...PAGES.map((p) => h('a', {
+    const page = pages.find((p) => p.id === id) || pages[0];
+    tabs.replaceChildren(...pages.map((p) => h('a', {
       href: `#${p.id}`, class: `tab${p.id === page.id ? ' on' : ''}`,
       'aria-current': p.id === page.id ? 'page' : null,
     }, p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
     if (page.id === 'work') renderWork(view, ctx);
     else if (page.id === 'board') renderBoard(view, ctx);
     else if (page.id === 'scores') renderScores(view, ctx);
+    else if (page.id === 'insights') renderInsights(view, ctx);
     else if (page.id === 'attendance') renderAttendance(view, ctx);
     else renderSystems(view, data, ctx);
     window.scrollTo(0, 0);
@@ -271,6 +275,8 @@ function todayCard(ctx) {
         stat(todayTotal ? `${Math.round((doneToday / todayTotal) * 100)}%` : '—', 'of today done', 'green'),
         stat(att.length, `checked in${late ? ` · ${late} late` : ''}`));
     }
+    const cel = (d.celebrations || []).filter((c) => c.today);
+    if (cel.length) box.after(celebrationsBox(cel));
     box.replaceChildren(
       h('div', { class: 'today-head' }, h('strong', {}, isDoer ? 'Your day' : 'Team today'),
         h('span', { class: 'today-links' },

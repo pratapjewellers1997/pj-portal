@@ -147,6 +147,7 @@ function actionWork_(req) {
     ok: true, user: user, scope: isDoer ? 'self' : 'all',
     range: { from: range.fromKey, to: range.toKey },
     names: names, tasks: tasks, attendance: attendance, monthly: monthly,
+    celebrations: celebrations_(data.joins || []),
     builtAt: data.builtAt, historic: Boolean(range.historic)
   };
   if (!isDoer) {
@@ -200,6 +201,137 @@ function actionLookup_(req) {
   return { ok: true, q: req.q, total: list.length, items: list.slice(0, 30), names: names, builtAt: data.builtAt };
 }
 
+/** Work anniversaries in the current month (1 year or more). */
+function celebrations_(joins) {
+  var now = new Date();
+  var ym = Utilities.formatDate(now, TZ, 'yyyy-MM'), today = Utilities.formatDate(now, TZ, 'yyyy-MM-dd');
+  var year = Number(ym.slice(0, 4));
+  var seen = {};
+  return joins.map(function (j) {
+    var years = year - Number(j.doj.slice(0, 4));
+    var date = ym + j.doj.slice(7);
+    if (years < 1 || j.doj.slice(5, 7) !== ym.slice(5, 7) || seen[j.email]) return null;
+    seen[j.email] = true;
+    return { email: j.email, name: j.name, date: date, years: years, today: date === today };
+  }).filter(Boolean).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+}
+
+/**
+ * insights {session, from, to} — Managers, Owners, Admin only.
+ *  funnels:    MeCa enquiry systems: enquiries -> visited -> converted, each Yes/No step,
+ *              by salesperson ("Handled By" / "Assign To") and by "Enquiry For".
+ *  turnaround: FMS with a Kaarigar or Vendor: per step on-time % and delay,
+ *              per kaarigar / vendor average days to finish.
+ */
+function actionInsights_(req) {
+  var user = findPerson_(readSession_(req.session));
+  if (user.role === 'Doer') throw apiError_('forbidden');
+  var range = parseRange_(req.from, req.to);
+  var data = range.historic ? loadHistory_(range) : (loadSnapshot_() || buildSnapshotLocked_(60000) || loadSnapshot_());
+  if (!data) throw apiError_('busy');
+  var now = Date.now(), H = 36e5, D = 864e5;
+  var round1 = function (x) { return Math.round(x * 10) / 10; };
+
+  // Group FMS steps by item
+  var byItem = {};
+  data.tasks.forEach(function (t) {
+    if (t.y !== 'FMS') return;
+    var id = t.s + '|' + t.k;
+    (byItem[id] = byItem[id] || { sys: t.s, system: t.n, key: t.k, steps: [] }).steps.push(t);
+  });
+  var itemsOf = function (sys) {
+    return Object.keys(byItem).map(function (id) { var it = byItem[id]; it.info = (data.items || {})[id] || { a: {} }; return it; })
+      .filter(function (it) { return it.sys === sys; });
+  };
+  var systems = {};
+  data.tasks.forEach(function (t) { if (t.y === 'FMS') systems[t.s] = t.n; });
+  var yes = function (v) { return /^y(es)?$/i.test(String(v || '')); };
+  var no = function (v) { return /^no?$/i.test(String(v || '')); };
+
+  // ---- Sales funnels (MeCa / enquiry systems)
+  var funnels = Object.keys(systems).filter(function (s) { return /meca|enquiry|nbd/i.test(systems[s]); }).map(function (sys) {
+    var list = itemsOf(sys).filter(function (it) {
+      var ts = it.info.ts || Math.min.apply(null, it.steps.map(function (x) { return x.p; }));
+      return ts >= range.from && ts <= range.to;
+    });
+    var stageMap = {}, people = {}, types = {};
+    var conv = 0, vis = 0, hasConv = false, hasVis = false;
+    list.forEach(function (it) {
+      var isConv = false, isVis = false;
+      it.steps.forEach(function (st) {
+        var k = (st.i == null ? 99 : st.i) + '|' + st.t;
+        var g = stageMap[k] = stageMap[k] || { i: st.i == null ? 99 : st.i, name: st.t, yes: 0, no: 0, done: 0, waiting: 0, yesNo: false };
+        if (st.v && (yes(st.v) || no(st.v))) g.yesNo = true;
+        if (st.d) { g.done++; if (yes(st.v)) g.yes++; else if (no(st.v)) g.no++; } else g.waiting++;
+        if (/convert/i.test(st.t)) { hasConv = true; if (yes(st.v)) isConv = true; }
+        if (/visit/i.test(st.t)) { hasVis = true; if (yes(st.v)) isVis = true; }
+      });
+      if (isConv) conv++;
+      if (isVis) vis++;
+      var who = it.info.a['handled by'] || it.info.a['assign to'] || 'Not set';
+      var p = people[who] = people[who] || { name: who, enquiries: 0, visited: 0, converted: 0 };
+      p.enquiries++; if (isVis) p.visited++; if (isConv) p.converted++;
+      var ty = it.info.a['enquiry for'] || 'Not set';
+      var tr = types[ty] = types[ty] || { name: ty, enquiries: 0, visited: 0, converted: 0 };
+      tr.enquiries++; if (isVis) tr.visited++; if (isConv) tr.converted++;
+    });
+    var vals = function (o) { return Object.keys(o).map(function (k) { return o[k]; }); };
+    return {
+      sys: sys, system: systems[sys], enquiries: list.length,
+      visited: hasVis ? vis : null, converted: hasConv ? conv : null,
+      stages: vals(stageMap).sort(function (a, b) { return a.i - b.i; }),
+      byPerson: vals(people).sort(function (a, b) { return b.enquiries - a.enquiries; }),
+      byType: vals(types).sort(function (a, b) { return b.enquiries - a.enquiries; }).slice(0, 15)
+    };
+  }).filter(function (f) { return f.enquiries; });
+
+  // ---- Turnaround (FMS with Kaarigar or Vendor)
+  var turnaround = Object.keys(systems).map(function (sys) {
+    var list = itemsOf(sys);
+    var partnerKey = list.some(function (it) { return it.info.a['kaarigar name']; }) ? 'kaarigar name'
+                   : list.some(function (it) { return it.info.a['vendor name']; }) ? 'vendor name' : '';
+    if (!partnerKey) return null;
+    var stepMap = {}, partners = {}, completed = 0, cycleSum = 0;
+    list.forEach(function (it) {
+      it.steps.forEach(function (st) {
+        var k = (st.i == null ? 99 : st.i) + '|' + st.t;
+        var g = stepMap[k] = stepMap[k] || { i: st.i == null ? 99 : st.i, name: st.t, done: 0, onTime: 0, lateH: 0, late: 0, overdue: 0 };
+        if (st.d && st.a >= range.from && st.a <= range.to) {
+          g.done++;
+          if (st.o) g.onTime++; else { g.late++; g.lateH += (st.a - st.p) / H; }
+        }
+        if (!st.d && st.p < now) g.overdue++;
+      });
+      var name = it.info.a[partnerKey] || 'Not set';
+      var pr = partners[name] = partners[name] || { name: name, completed: 0, days: 0, done: 0, onTime: 0, open: 0 };
+      var open = it.steps.some(function (st) { return !st.d; });
+      if (open) pr.open++;
+      it.steps.forEach(function (st) { if (st.d && st.a >= range.from && st.a <= range.to) { pr.done++; if (st.o) pr.onTime++; } });
+      var last = Math.max.apply(null, it.steps.map(function (st) { return st.a || 0; }));
+      var start = it.info.ts || Math.min.apply(null, it.steps.map(function (st) { return st.p; }));
+      if (!open && last >= range.from && last <= range.to && start) {
+        var days = (last - start) / D;
+        completed++; cycleSum += days; pr.completed++; pr.days += days;
+      }
+    });
+    var vals = function (o) { return Object.keys(o).map(function (k) { return o[k]; }); };
+    return {
+      sys: sys, system: systems[sys], partner: partnerKey === 'kaarigar name' ? 'Kaarigar' : 'Vendor',
+      completed: completed, avgDays: completed ? round1(cycleSum / completed) : null,
+      steps: vals(stepMap).sort(function (a, b) { return a.i - b.i; }).map(function (g) {
+        return { name: g.name, done: g.done, onTime: g.onTime, overdue: g.overdue, avgLateH: g.late ? round1(g.lateH / g.late) : null };
+      }),
+      partners: vals(partners).map(function (pr) {
+        return { name: pr.name, completed: pr.completed, avgDays: pr.completed ? round1(pr.days / pr.completed) : null,
+                 done: pr.done, onTime: pr.onTime, open: pr.open };
+      }).sort(function (a, b) { return (b.avgDays || 0) - (a.avgDays || 0); })
+    };
+  }).filter(Boolean);
+
+  return { ok: true, range: { from: range.fromKey, to: range.toKey }, funnels: funnels, turnaround: turnaround,
+           celebrations: celebrations_(data.joins || []), builtAt: data.builtAt, historic: Boolean(range.historic) };
+}
+
 function parseRange_(from, to) {
   var re = /^\d{4}-\d{2}-\d{2}$/;
   var today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
@@ -247,7 +379,7 @@ function buildSnapshot_(win) {
   var names = buildNameMap_(raw);
 
   // 3. Turn each source into tasks / attendance
-  var tasks = [], bases = {}, attendance = [], monthly = [], liveToday = 0;
+  var tasks = [], bases = {}, attendance = [], monthly = [], liveToday = 0, items = {}, joins = [];
   raw.forEach(function (r) {
     if (!r.book) return;
     var t0 = Date.now();
@@ -256,6 +388,7 @@ function buildSnapshot_(win) {
         var att = parseAttendance_(r.src, r.book, names, cutoff);
         attendance = attendance.concat(att.days);
         monthly = monthly.concat(att.monthly);
+        joins = joins.concat(att.joins || []);
         liveToday += att.liveToday;
         r.health.rows = att.days.length;
       } else {
@@ -267,6 +400,7 @@ function buildSnapshot_(win) {
         var bk = r.src.sysId + '|' + r.src.tab;
         bases[bk] = r.book.url + '/edit#gid=' + (r.book.gids[r.src.tab] || 0) + '&range=A';
         list.forEach(function (t) { t.b = bk; });
+        if (list.items) Object.keys(list.items).forEach(function (k) { items[k] = list.items[k]; });
         tasks = tasks.concat(list);
         r.health.rows = list.length;
         if (list.check) r.health.check = list.check;
@@ -278,7 +412,7 @@ function buildSnapshot_(win) {
   });
 
   return {
-    tasks: tasks, bases: bases, attendance: attendance, monthly: monthly,
+    tasks: tasks, bases: bases, attendance: attendance, monthly: monthly, items: items, joins: joins,
     builtAt: new Date().toISOString(),
     health: {
       sources: raw.map(function (r) { return r.health; }),
@@ -397,6 +531,7 @@ function readBook_(src) {
     want['EMPLOYEES|A'] = q_('EMPLOYEES') + '!A:A';
     want['EMPLOYEES|D'] = q_('EMPLOYEES') + '!D:D';
     want['EMPLOYEES|G'] = q_('EMPLOYEES') + '!G:I';
+    want['EMPLOYEES|K'] = q_('EMPLOYEES') + '!K:K';      // Date_Of_Joining (work anniversaries)
   }
 
   var meta = Sheets.Spreadsheets.get(src.id, { fields: 'sheets.properties(sheetId,title)' });
@@ -514,6 +649,7 @@ function parseFms_(src, book, names, cutoff, horizon) {
     for (var b = c; b >= prevEnd && b >= 1; b--) { if (String(stepRow[b] || '').trim()) { nameCol = b; break; } }
     steps.push({
       planned: c, actual: c + 1, doer: labels[c - 1] === 'doer' ? c - 1 : -1,
+      ans: (labels[c + 2] === 'yes/no' || labels[c + 2] === 'status') ? c + 2 : -1,
       name: nameCol > -1 ? String(stepRow[nameCol]).trim() : 'Step ' + (steps.length + 1),
       who: nameCol > -1 ? String(whoRow[nameCol] || '').trim() : ''
     });
@@ -537,11 +673,17 @@ function parseFms_(src, book, names, cutoff, horizon) {
     });
   }
 
+  var ATTRS = ['enquiry for', 'handled by ?', 'handled by', 'assign to', 'kaarigar name', 'vendor name',
+               'customer type', 'via', 'delivery type', 'product name'];
+  var attrCols = ATTRS.map(function (n) { return [n.replace(' ?', ''), labels.indexOf(n)]; })
+    .filter(function (x) { return x[1] > -1; });
+  var items = {};
   var out = [];
   for (var r = 6; r < v.length; r++) {
     var row = v[r] || [];
     if (!row[0] && !row[1]) continue;
     var key = keyCol > -1 ? String(row[keyCol] || '').trim() : '';
+    var before = out.length;
     var label = labelCols.map(function (i) { return String(row[i] || '').trim(); }).filter(Boolean)[0] || '';
     if (lastNameCol > -1 && labels[labelCols[0]] === 'customer first name' && row[lastNameCol]) {
       label = (label + ' ' + String(row[lastNameCol]).trim()).trim();
@@ -563,9 +705,16 @@ function parseFms_(src, book, names, cutoff, horizon) {
       var t = { s: src.sysId, n: src.system, y: 'FMS', k: key || 'Row ' + (r + 1), l: label,
                 t: st.name, p: p, a: a, d: Boolean(a), o: a ? a <= p : null, w: who, u: r + 1, i: si };
       if (!a && markLink[key + '|' + normName_(st.name)]) t.m = markLink[key + '|' + normName_(st.name)];
+      if (st.ans > -1 && row[st.ans]) t.v = String(row[st.ans]).trim().slice(0, 20);
       out.push(t);
     });
+    if (out.length > before) {                         // item has steps in the window: keep its details
+      var at = {};
+      attrCols.forEach(function (x) { var val = String(row[x[1]] || '').trim(); if (val) at[x[0]] = val.slice(0, 40); });
+      items[src.sysId + '|' + (key || 'Row ' + (r + 1))] = { ts: toMs_(row[0]), a: at };
+    }
   }
+  out.items = items;
   out.check = reconcileFms_(out, dv);
   return out;
 }
@@ -746,7 +895,16 @@ function parseAttendance_(src, book, names, cutoff) {
       });
     });
   }
-  return { days: days, monthly: monthly, liveToday: liveToday };
+  // Work anniversaries: EMPLOYEES Date_Of_Joining (column K)
+  var joins = [], ek = book.tabs['EMPLOYEES|K'] || [];
+  if (ek.length && /joining/i.test(String((ek[0] || [])[0] || ''))) {
+    en.forEach(function (row, i) {
+      if (i === 0 || !row[0] || !ek[i] || !ek[i][0]) return;
+      var who = resolveNames_(row[0], names), d = dateKey_(ek[i][0]);
+      if (who.length && d) joins.push({ email: who[0], name: cleanName_(row[0]), doj: d });
+    });
+  }
+  return { days: days, monthly: monthly, liveToday: liveToday, joins: joins };
 }
 
 /* ================= Small helpers ================= */

@@ -358,6 +358,24 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 .wb-fill.sc-good { background: #3E9B5C; } .wb-fill.sc-ok { background: #D9A21E; } .wb-fill.sc-bad { background: #C94545; }
 .wb-label { font-size: 10.5px; color: var(--muted); text-align: center; }
 
+/* ---------- Insights ---------- */
+.ins-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+.ins-card h3 { margin: 0 0 10px; color: var(--navy); font-size: 17px; }
+.ins-card h4 { margin: 16px 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.fn-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.fn-stage { background: var(--cream); border-radius: 10px; padding: 10px; }
+.fn-num { font-size: 26px; font-weight: 700; color: var(--navy); line-height: 1.1; }
+.fn-label { font-size: 13px; color: var(--muted); }
+.fn-pct { font-size: 12px; color: var(--green); font-weight: 600; margin-top: 2px; }
+.fn-bars { display: grid; gap: 6px; margin-top: 12px; }
+.fn-bar { position: relative; height: 22px; background: #F3EEE2; border-radius: 6px; overflow: hidden; }
+.fn-bar span { display: block; height: 100%; background: var(--gold); border-radius: 6px; }
+.fn-bar em { position: absolute; left: 8px; top: 2px; font-style: normal; font-size: 12px; font-weight: 600; color: var(--navy); }
+.ins-more { margin-top: 12px; }
+.ins-more summary { cursor: pointer; color: var(--navy); font-weight: 500; font-size: 14px; margin-bottom: 8px; }
+.celebrate { margin: 12px 16px 0; border-left-color: #2E9E55; }
+.page-body .celebrate { margin: 12px 0; }
+
 /* ---------- Viewer (desktop "Open here") ---------- */
 .viewer { position: fixed; inset: 0; z-index: 20; background: var(--navy); display: flex; flex-direction: column; }
 .viewer-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; color: #fff; border-bottom: 2px solid var(--gold); }
