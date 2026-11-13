@@ -2,6 +2,7 @@ import { h, safeUrl } from './dom.js';
 import { loadWork, ymd, fmtDateTime, fmtDay, loadingBox, ERRORS, markButton } from './workdata.js';
 import { tone, pctOf, weeksEnding, scoreRows, GOOD } from './scoring.js';
 import { scoreCell, changeText } from './scores.js';
+import { profileKudos } from './social.js';
 
 // Person profile: one page per person — score trend, open tasks, attendance.
 // Uses the same 8-week data as the Scores page, so it opens instantly after it.
@@ -52,7 +53,7 @@ function draw(head, body, data, weeks, ctx, email) {
       h('div', {},
         h('h1', {}, person.name),
         h('p', {}, [person.designation, person.role].filter(Boolean).join(' · ')))),
-    !isDoer && h('a', { href: '#scores', class: 'back-link' }, '← Back to scores'));
+    ...(isDoer ? [] : [h('a', { href: '#scores', class: 'back-link' }, '← Back to scores')]));
 
   // ---- Number tiles
   const overdue = tasks.filter((t) => t.status === 'overdue');
@@ -118,7 +119,7 @@ function draw(head, body, data, weeks, ctx, email) {
         d.late && `Late ${d.lateBy} min`, d.earlyLeave && 'Left early'].filter(Boolean).join(' · ')))))
       : h('p', { class: 'empty' }, 'No attendance found.'));
 
-  body.replaceChildren(...[tiles, badge, trend, openList, attList,
+  body.replaceChildren(...[tiles, badge, profileKudos({ ...ctx, user: me }, person), trend, openList, attList,
     h('p', { class: 'foot-note' }, `Data refreshed ${fmtDateTime(Date.parse(data.builtAt))}`)].filter(Boolean));
   void now;
 }

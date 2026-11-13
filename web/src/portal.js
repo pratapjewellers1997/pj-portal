@@ -5,6 +5,7 @@ import { renderBoard } from './board.js';
 import { renderScores } from './scores.js';
 import { renderProfile } from './profile.js';
 import { renderInsights, celebrationsBox } from './insights.js';
+import { noticeBoard, kudosWall } from './social.js';
 import { loadWork, ymd } from './workdata.js';
 
 // Function groups in the order agreed in the hand-off.
@@ -97,7 +98,9 @@ function renderSystems(root, data, ctx) {
       h('p', {}, [user.designation, `${systems.length} systems`, `${linkCount} links`].filter(Boolean).join(' · ')),
       search,
       installHint()),
+    noticeBoard(ctx),
     todayCard(ctx),
+    kudosWall(ctx),
     user.role !== 'Doer' ? activityLine(systems) : null,
     h('div', { class: 'layout' }, chips, main),
     h('footer', { class: 'foot-note' }, `Updated ${formatTime(data.generatedAt)} · Pratap Jewellers MIS`),
