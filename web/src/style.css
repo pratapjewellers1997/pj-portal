@@ -316,13 +316,22 @@ table.data tbody tr[role="button"]:hover { background: var(--cream); }
 .bcard-title { font-weight: 600; color: var(--ink); font-size: 14px; }
 
 /* ---------- Scores ---------- */
-.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
-table.scores td.sc { text-align: center; min-width: 64px; }
-.sc-nd { font-weight: 600; font-size: 14px; }
-.sc-nt { font-size: 12px; opacity: 0.8; }
+.score-explain { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0 12px; }
+.score-formula { font-size: 15px; color: var(--navy); margin-bottom: 8px; }
+.legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+.lg { padding: 3px 10px; border-radius: 999px; font-weight: 600; }
+.lg-good { background: var(--green-bg); color: var(--green); }
+.lg-ok { background: var(--amber-bg); color: var(--amber); }
+.lg-bad { background: var(--red-bg); color: var(--red); }
+table.scores td.sc { text-align: center; min-width: 70px; }
+.sc-big { font-weight: 700; font-size: 16px; }
+.sc-small { font-size: 11.5px; opacity: 0.85; }
 .sc-good { background: var(--green-bg); color: var(--green); }
 .sc-ok { background: var(--amber-bg); color: var(--amber); }
 .sc-bad { background: var(--red-bg); color: var(--red); }
+.sc-change { text-align: center; font-weight: 600; }
+.sc-change .up { color: var(--green); }
+.sc-change .down { color: var(--red); }
 
 /* ---------- Viewer (desktop "Open here") ---------- */
 .viewer { position: fixed; inset: 0; z-index: 20; background: var(--navy); display: flex; flex-direction: column; }
