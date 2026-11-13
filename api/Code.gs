@@ -54,7 +54,25 @@ function actionPortal_(req) {
   var email = readSession_(req.session);
   var user = findPerson_(email);
   var portal = buildPortal_(user);
-  return { ok: true, user: user, systems: portal.systems, generatedAt: portal.generatedAt };
+  return { ok: true, user: user, systems: withActivity_(portal.systems, user), generatedAt: portal.generatedAt };
+}
+
+/** Adds "last edited" (and, for non-doers, who edited) to every Google Sheet link. */
+function withActivity_(systems, user) {
+  var act = loadActivity_();
+  if (!act || !act.files) return systems;
+  var byId = {};
+  act.files.forEach(function (f) { byId[f.id] = f; });
+  var showWho = user.role !== 'Doer';
+  return systems.map(function (s) {
+    var copy = JSON.parse(JSON.stringify(s));
+    copy.links.forEach(function (l) {
+      var m = String(l.url || '').match(/spreadsheets\/d\/([\w-]{20,})/);
+      var f = m && byId[m[1]];
+      if (f) { l.edited = f.t; if (showWho) l.editedBy = f.by; }
+    });
+    return copy;
+  });
 }
 
 function apiError_(code) {

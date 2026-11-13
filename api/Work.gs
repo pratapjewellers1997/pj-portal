@@ -64,6 +64,7 @@ function refreshWorkCache() {
   var hour = Number(Utilities.formatDate(new Date(), TZ, 'H'));
   if (hour >= QUIET_HOURS[0] && hour < QUIET_HOURS[1]) return;
   buildSnapshotLocked_(5000);
+  try { refreshActivity_(false); } catch (e) { console.warn('Activity refresh failed: ' + e); }
 }
 
 /** Run from the editor: rebuilds now and prints a health report. */
@@ -73,6 +74,17 @@ function testWork() {
   data.health.sources.forEach(function (h) {
     Logger.log(h.system + ' [' + h.tab + ']: ' + (h.error ? 'ERROR ' + h.error : h.rows + ' items') + ' (' + h.ms + ' ms)');
   });
+  data.health.sources.forEach(function (h) {
+    if (!h.check) return;
+    Logger.log('CHECK ' + h.system + ': DB_Format pending ' + h.check.db + ' · portal pending ' + h.check.portal +
+      (h.check.missing ? ' · missing in portal ' + h.check.missing + ' e.g. ' + h.check.missingEx.join(' ; ') : '') +
+      (h.check.extra ? ' · extra in portal ' + h.check.extra + ' e.g. ' + h.check.extraEx.join(' ; ') : '') +
+      (!h.check.missing && !h.check.extra ? ' · MATCH' : ''));
+  });
+  var act = refreshActivity_(true);
+  Logger.log('Sheet activity: ' + act.files.length + ' sheets · edited in last 24 h: ' +
+    act.files.filter(function (f) { return f.t > Date.now() - DAY_MS; }).length +
+    (act.errors.length ? ' · could not read: ' + act.errors.join(', ') : ''));
   Logger.log('Attendance days: ' + data.attendance.length + ' · today live: ' + data.health.liveToday +
              ' · monthly rows: ' + data.monthly.length);
   Logger.log('Unmatched names: ' + (data.health.unmatched.join(', ') || 'none'));
@@ -214,6 +226,7 @@ function buildSnapshot_(win) {
         list.forEach(function (t) { t.b = bk; });
         tasks = tasks.concat(list);
         r.health.rows = list.length;
+        if (list.check) r.health.check = list.check;
       }
     } catch (err) {
       r.health.error = shortErr_(err);
@@ -446,7 +459,7 @@ function parseFms_(src, book, names, cutoff, horizon) {
   var v = book.tabs[src.tab];
   if (!v || v.length < 7) return [];
   var labels = lowerRow_(v[5]), stepRow = v[1] || [], whoRow = v[2] || [];
-  var keyCol = firstCol_(labels, ['unique key', 'repair id', 'transaction id', 'order number', 'job id']);
+  var keyCol = firstCol_(labels, ['unique key', 'repair id', 'transaction id', 'order number', 'job id', 'product']);
   var labelCols = ['customer name', 'customer first name', 'full name', 'job title / role', 'article name', 'article']
     .map(function (n) { return labels.indexOf(n); }).filter(function (i) { return i > -1; });
   var lastNameCol = labels.indexOf('customer last name');
@@ -506,7 +519,34 @@ function parseFms_(src, book, names, cutoff, horizon) {
                  t: st.name, p: p, a: a, d: Boolean(a), o: a ? a <= p : null, w: who, u: r + 1 });
     });
   }
+  out.check = reconcileFms_(out, dv);
   return out;
+}
+
+/**
+ * Self-check: DB_Format is the pending list Data Studio uses. Every open step
+ * planned up to the end of today should appear in both lists.
+ * Returns counts and up to 5 examples each way (shown in Data health).
+ */
+function reconcileFms_(tasks, dv) {
+  if (!dv || dv.length < 2) return null;
+  var dh = lowerRow_(dv[0]);
+  var ck = dh.indexOf('unique key'), cs = dh.indexOf('step');
+  if (ck < 0 || cs < 0) return null;
+  var endToday = istMs_(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'), '23:59:59');
+  var keyOf = function (k, step) { return String(k || '').trim() + '|' + normName_(step); };
+  var db = {}, portal = {};
+  dv.slice(1).forEach(function (r) {
+    if (String(r[ck] || '').trim()) db[keyOf(r[ck], r[cs])] = String(r[ck]).trim() + ' / ' + String(r[cs] || '').trim();
+  });
+  tasks.forEach(function (t) {
+    if (!t.d && t.p <= endToday) portal[keyOf(t.k, t.t)] = t.k + ' / ' + t.t;
+  });
+  var missing = Object.keys(db).filter(function (k) { return !portal[k]; }).map(function (k) { return db[k]; });
+  var extra = Object.keys(portal).filter(function (k) { return !db[k]; }).map(function (k) { return portal[k]; });
+  return { db: Object.keys(db).length, portal: Object.keys(portal).length,
+           missing: missing.length, extra: extra.length,
+           missingEx: missing.slice(0, 5), extraEx: extra.slice(0, 5) };
 }
 
 /** Checklist "Master": the Email column is the final doer (buddy already reflected). */
@@ -706,4 +746,48 @@ function monthsBetween_(fromKey, toKey) {
     m++; if (m > 12) { m = 1; y++; }
   }
   return out;
+}
+
+/* ================= Sheet activity (last edited) ================= */
+
+var ACTIVITY_KEY = 'activity_v1';
+var ACTIVITY_EVERY_MS = 30 * 60 * 1000;   // refreshed at most every 30 minutes
+
+/**
+ * "Last edited" time of every Google Sheet linked in the Registry Links tab,
+ * from Drive metadata (read-only scope). Google does not tell scripts when a
+ * file was merely OPENED by someone, only when it was last EDITED.
+ * Stored small (a few KB) in Script Properties.
+ */
+function refreshActivity_(force) {
+  var props = PropertiesService.getScriptProperties();
+  var old = null;
+  try { old = JSON.parse(props.getProperty(ACTIVITY_KEY) || 'null'); } catch (e) {}
+  if (!force && old && Date.now() - old.builtAt < ACTIVITY_EVERY_MS) return old;
+
+  var sheet = SpreadsheetApp.openById(cfg_('REGISTRY_ID')).getSheetByName('Links');
+  var rows = sheet.getDataRange().getDisplayValues();
+  var h = lowerRow_(rows[0]), cU = h.indexOf('url'), cS = h.indexOf('system id');
+  var ids = {};
+  rows.slice(1).forEach(function (r) {
+    var m = String(r[cU] || '').match(/docs\.google\.com\/spreadsheets\/d\/([\w-]{20,})(\/(copy))?/);
+    if (m && !m[3]) (ids[m[1]] = ids[m[1]] || []).push(r[cS]);
+  });
+
+  var files = [], errors = [];
+  Object.keys(ids).forEach(function (id) {
+    try {
+      var f = Drive.Files.get(id, { fields: 'name,modifiedTime,lastModifyingUser(displayName)', supportsAllDrives: true });
+      files.push({ id: id, name: f.name, t: Date.parse(f.modifiedTime),
+                   by: (f.lastModifyingUser && f.lastModifyingUser.displayName) || '', sys: ids[id] });
+    } catch (e) { errors.push(ids[id][0] || id); }
+  });
+  var data = { builtAt: Date.now(), files: files, errors: errors };
+  try { props.setProperty(ACTIVITY_KEY, JSON.stringify(data)); } catch (e) { console.warn('Activity too big to store: ' + e); }
+  return data;
+}
+
+function loadActivity_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(ACTIVITY_KEY) || 'null'); }
+  catch (e) { return null; }
 }

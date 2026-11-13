@@ -79,6 +79,7 @@ function draw(body, data, ctx, redraw) {
     tile('Overdue', overdue, overdue ? 'red' : '', carried ? `${carried} from before this range` : ''));
 
   const parts = [filters, kpis];
+  if (!isDoer && !state.person && !state.system) parts.push(overview(tasks, data, nameOf, (key) => { state.person = key; draw(body, data, ctx, redraw); }));
   if (!isDoer && !state.person) parts.push(summaryTable('By person', groupBy(tasks, 'person', data.people || [], nameOf),
     (key) => { state.person = key; draw(body, data, ctx, redraw); }));
   if (!state.system) parts.push(summaryTable('By system', groupBy(tasks, 'system'),
@@ -120,7 +121,7 @@ function draw(body, data, ctx, redraw) {
   if (data.health) parts.push(healthPanel(data.health));
   parts.push(h('p', { class: 'foot-note' },
     `${data.historic ? 'Read from the sheets' : 'Data refreshed'} ${fmtDateTime(Date.parse(data.builtAt))} · updates every 10 minutes`));
-  body.replaceChildren(...parts);
+  body.replaceChildren(...parts.filter(Boolean));
 }
 
 function taskItem(t, isDoer, user, nameOf) {
@@ -193,10 +194,16 @@ function healthPanel(health) {
     h('summary', {}, `Data health (Admin) · ${health.sources.filter((s) => s.error).length} errors · ${health.sizeKb} KB`),
     h('div', { class: 'table-wrap' },
       h('table', { class: 'data' },
-        h('thead', {}, h('tr', {}, ['Source', 'Tab', 'Items', 'Time', 'Status'].map((x) => h('th', {}, x)))),
+        h('thead', {}, h('tr', {}, ['Source', 'Tab', 'Items', 'Time', 'Status', 'Pending vs DB_Format'].map((x) => h('th', {}, x)))),
         h('tbody', {}, health.sources.map((s) => h('tr', {},
           h('td', {}, s.system), h('td', {}, s.tab), h('td', {}, s.rows), h('td', {}, `${(s.ms / 1000).toFixed(1)} s`),
-          h('td', { class: s.error ? 'num-red' : '' }, s.error || 'OK')))))),
+          h('td', { class: s.error ? 'num-red' : '' }, s.error || 'OK'),
+          h('td', { class: s.check && (s.check.missing || s.check.extra) ? 'num-amber' : '' }, checkText(s.check))))))),
+    health.sources.some((s) => s.check && (s.check.missing || s.check.extra)) && h('ul', { class: 'check-list' },
+      health.sources.filter((s) => s.check && (s.check.missing || s.check.extra)).map((s) => h('li', {},
+        h('b', {}, s.system), ': ',
+        s.check.missing ? `in DB_Format but not in portal: ${s.check.missingEx.join('; ')}${s.check.missing > 5 ? ' …' : ''}. ` : '',
+        s.check.extra ? `in portal but not in DB_Format: ${s.check.extraEx.join('; ')}${s.check.extra > 5 ? ' …' : ''}.` : ''))),
     h('p', { class: 'muted-sm' },
       `Unmatched names: ${health.unmatched.length ? health.unmatched.join(', ') : 'none'} · ` +
       `stored in ${health.storedIn.join(' + ')} · built in ${(health.totalMs / 1000).toFixed(0)} s`));
@@ -212,4 +219,57 @@ function lateBy(ms) {
 
 function freqLabel(f) {
   return { D: 'Daily', W: 'Weekly', M: 'Monthly', F: 'Fortnightly', Q: 'Quarterly', Y: 'Yearly' }[f] || f;
+}
+
+/* ---------- Owner / Manager overview: who is behind, which step is stuck ---------- */
+
+function overview(tasks, data, nameOf, pickPerson) {
+  const overdue = tasks.filter((t) => t.status === 'overdue');
+  if (!overdue.length && !tasks.length) return null;
+
+  const byPerson = new Map();
+  overdue.forEach((t) => (t.who.length ? t.who : ['-']).forEach((e) => byPerson.set(e, (byPerson.get(e) || 0) + 1)));
+  const people = [...byPerson.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const bySteps = new Map();
+  overdue.filter((t) => t.type === 'FMS').forEach((t) => {
+    const k = `${t.system}|${t.task}`;
+    const r = bySteps.get(k) || { system: t.system, step: t.task, n: 0, oldest: t.planned };
+    r.n++; r.oldest = Math.min(r.oldest, t.planned);
+    bySteps.set(k, r);
+  });
+  const steps = [...bySteps.values()].sort((a, b) => b.n - a.n).slice(0, 5);
+
+  const lateDone = tasks.filter((t) => t.status === 'late' && t.actual);
+  const avgLateH = lateDone.length
+    ? Math.round(lateDone.reduce((s, t) => s + (t.actual - t.planned), 0) / lateDone.length / 36e5) : 0;
+  const max = Math.max(1, ...people.map((p) => p[1]));
+
+  return h('section', { class: 'overview' },
+    h('h2', { class: 'section-title' }, 'At a glance'),
+    h('div', { class: 'overview-grid' },
+      h('div', { class: 'ov-card' },
+        h('h3', {}, 'Most overdue'),
+        people.length ? h('ul', { class: 'bars' }, people.map(([e, n]) => h('li', {
+          role: 'button', tabindex: '0', onclick: () => pickPerson(e),
+          onkeydown: (ev) => { if (ev.key === 'Enter') pickPerson(e); },
+        },
+        h('span', { class: 'bar-label' }, e === '-' ? 'Not assigned' : nameOf(e)),
+        h('span', { class: 'bar' }, h('span', { class: 'bar-fill', style: `width:${Math.round((n / max) * 100)}%` })),
+        h('span', { class: 'bar-num' }, n)))) : h('p', { class: 'muted-sm' }, 'Nobody is overdue.')),
+      h('div', { class: 'ov-card' },
+        h('h3', {}, 'Stuck FMS steps'),
+        steps.length ? h('ul', { class: 'stuck' }, steps.map((r) => h('li', {},
+          h('b', {}, r.n), h('span', {}, h('span', { class: 'stuck-step' }, r.step), h('span', { class: 'muted-sm' }, ` · ${r.system}`))))) :
+          h('p', { class: 'muted-sm' }, 'No FMS step is overdue.')),
+      h('div', { class: 'ov-card' },
+        h('h3', {}, 'When work is late'),
+        h('p', { class: 'ov-big' }, lateDone.length ? `${avgLateH} h` : '—'),
+        h('p', { class: 'muted-sm' }, lateDone.length ? `average delay across ${lateDone.length} late tasks in this range` : 'No late tasks in this range'))));
+}
+
+function checkText(c) {
+  if (!c) return '—';
+  if (!c.missing && !c.extra) return `Match (${c.db})`;
+  return `${c.db} vs ${c.portal}` + (c.missing ? ` · ${c.missing} missing` : '') + (c.extra ? ` · ${c.extra} extra` : '');
 }

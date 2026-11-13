@@ -1,6 +1,7 @@
 import { h, safeUrl, isPhone } from './dom.js';
 import { renderWork } from './work.js';
 import { renderAttendance } from './attendance.js';
+import { loadWork, ymd } from './workdata.js';
 
 // Function groups in the order agreed in the hand-off.
 const GROUP_ORDER = [
@@ -50,14 +51,14 @@ export function renderPortal(root, data, { onSignOut, session }) {
     }, p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
     if (page.id === 'work') renderWork(view, ctx);
     else if (page.id === 'attendance') renderAttendance(view, ctx);
-    else renderSystems(view, data);
+    else renderSystems(view, data, ctx);
     window.scrollTo(0, 0);
   }
   window.onhashchange = route;
   route();
 }
 
-function renderSystems(root, data) {
+function renderSystems(root, data, ctx) {
   const { user, systems = [] } = data;
   const state = { query: '', group: 'All', open: new Set() };
 
@@ -72,14 +73,17 @@ function renderSystems(root, data) {
     'aria-label': 'Search', oninput: (e) => { state.query = e.target.value.trim().toLowerCase(); draw(); },
   });
 
-  root.replaceChildren(
+  root.replaceChildren(...[
     h('section', { class: 'hero' },
       h('h1', {}, `Namaste, ${firstName}`),
       h('p', {}, [user.designation, `${systems.length} systems`, `${linkCount} links`].filter(Boolean).join(' · ')),
-      search),
+      search,
+      installHint()),
+    todayCard(ctx),
+    user.role !== 'Doer' ? activityLine(systems) : null,
     h('div', { class: 'layout' }, chips, main),
     h('footer', { class: 'foot-note' }, `Updated ${formatTime(data.generatedAt)} · Pratap Jewellers MIS`),
-  );
+  ].filter(Boolean));
 
   function drawChips(visible) {
     const counts = Object.fromEntries(groups.map((g) => [g, 0]));
@@ -152,6 +156,7 @@ function systemCard(sys, open, openSet) {
   h('span', { class: 'card-title' }, sys.name),
   h('span', { class: 'card-meta' },
     inactive && h('span', { class: 'badge' }, 'Inactive'),
+    activityDot(latestEdit(sys)),
     h('span', { class: 'count-pill' }, `${n} ${n === 1 ? 'link' : 'links'}`),
     h('span', { class: 'chev', 'aria-hidden': 'true' }, '›')));
   card.append(head,
@@ -169,7 +174,121 @@ function linkButton(sys, link) {
     onclick: () => openLink(sys, link),
   },
   h('span', { class: `tag tag-${style}` }, link.type || 'Link'),
-  h('span', { class: 'label' }, link.label));
+  h('span', { class: 'label' }, link.label),
+  link.edited && h('span', { class: `edited ${isFresh(link.edited) ? 'fresh' : 'stale'}`,
+    title: `Last edited ${new Date(link.edited).toLocaleString('en-IN')}${link.editedBy ? ' by ' + link.editedBy : ''}` },
+  ago(link.edited)));
+}
+
+/* ---------- Sheet activity: green = edited in the last 24 h, red = not ---------- */
+
+const DAY = 864e5;
+const isFresh = (ms) => Date.now() - ms < DAY;
+const latestEdit = (sys) => sys.links.reduce((m, l) => Math.max(m, l.edited || 0), 0);
+
+function ago(ms) {
+  const mins = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+function activityDot(ms) {
+  if (!ms) return null;
+  return h('span', {
+    class: `dot ${isFresh(ms) ? 'dot-green' : 'dot-red'}`,
+    title: `${isFresh(ms) ? 'Active' : 'Not edited'} · last edit ${ago(ms)}`,
+    'aria-label': `${isFresh(ms) ? 'Active' : 'Not edited in 24 hours'}, last edit ${ago(ms)}`,
+  });
+}
+
+/** One line for Managers and above: how many sheets were edited in the last 24 h, with the list. */
+function activityLine(systems) {
+  const seen = new Map();
+  systems.forEach((s) => s.links.forEach((l) => {
+    if (!l.edited) return;
+    const id = (String(l.url).match(/spreadsheets\/d\/([\w-]+)/) || [])[1] || l.url;
+    if (!seen.has(id)) seen.set(id, { label: l.label, system: s.name, edited: l.edited, by: l.editedBy || '' });
+  }));
+  const rows = [...seen.values()].sort((a, b) => a.edited - b.edited);
+  if (!rows.length) return null;
+  const fresh = rows.filter((r) => isFresh(r.edited)).length;
+  return h('details', { class: 'activity' },
+    h('summary', {},
+      h('span', { class: 'dot dot-green', 'aria-hidden': 'true' }), ` ${fresh} active`,
+      h('span', { class: 'sep' }, '·'),
+      h('span', { class: 'dot dot-red', 'aria-hidden': 'true' }), ` ${rows.length - fresh} not edited in 24 h`,
+      h('span', { class: 'muted-sm' }, ' · tap to see sheets')),
+    h('ul', { class: 'activity-list' }, rows.map((r) => h('li', {},
+      activityDot(r.edited),
+      h('span', { class: 'act-label' }, r.label),
+      h('span', { class: 'muted-sm' }, `${r.system} · ${ago(r.edited)}${r.by ? ' · ' + r.by : ''}`)))));
+}
+
+/* ---------- Today card: Doers see their day, others see the team ---------- */
+
+function todayCard(ctx) {
+  const box = h('section', { class: 'today', 'aria-live': 'polite' },
+    h('div', { class: 'today-row' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', {}, 'Loading today…')));
+  const today = ymd(new Date());
+  loadWork(ctx.session, today, today).then((d) => {
+    const isDoer = d.scope === 'self';
+    const due = d.tasks.filter((t) => t.status === 'due').length;
+    const overdue = d.tasks.filter((t) => t.status === 'overdue').length;
+    const doneToday = d.tasks.filter((t) => !t.carry && ['on_time', 'late', 'done'].includes(t.status)).length;
+    const todayTotal = d.tasks.filter((t) => !t.carry).length;
+    const att = d.attendance.filter((a) => a.date === today);
+    const parts = [];
+    if (isDoer) {
+      const me = att[0];
+      parts.push(
+        stat(due, 'due today', due ? 'amber' : ''),
+        stat(overdue, 'overdue', overdue ? 'red' : ''),
+        stat(`${doneToday}/${todayTotal}`, 'done today', 'green'),
+        h('div', { class: 'today-att' }, me
+          ? `Checked in ${me.checkIn}${me.late ? ` · late ${me.lateBy} min` : ' · on time'}`
+          : 'Not checked in yet today'));
+    } else {
+      const late = att.filter((a) => a.late).length;
+      parts.push(
+        stat(overdue, 'overdue tasks', overdue ? 'red' : ''),
+        stat(due, 'still due today', due ? 'amber' : ''),
+        stat(todayTotal ? `${Math.round((doneToday / todayTotal) * 100)}%` : '—', 'of today done', 'green'),
+        stat(att.length, `checked in${late ? ` · ${late} late` : ''}`));
+    }
+    box.replaceChildren(
+      h('div', { class: 'today-head' }, h('strong', {}, isDoer ? 'Your day' : 'Team today'),
+        h('a', { href: '#work', class: 'today-link' }, isDoer ? 'Open my work →' : 'Open work →')),
+      h('div', { class: 'today-stats' }, parts));
+  }).catch(() => box.remove());
+  return box;
+}
+
+function stat(value, label, tone = '') {
+  return h('div', { class: `today-stat${tone ? ' t-' + tone : ''}` }, h('b', {}, value), h('span', {}, label));
+}
+
+/* ---------- Install as an app ---------- */
+
+function installHint() {
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (standalone) return null;
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const wrap = h('div', { class: 'install' });
+  const showButton = () => {
+    wrap.replaceChildren(h('button', {
+      type: 'button', class: 'btn-install',
+      onclick: async () => {
+        const e = window.__pjInstall; if (!e) return;
+        e.prompt(); await e.userChoice; window.__pjInstall = null; wrap.remove();
+      },
+    }, 'Install app on this phone'));
+  };
+  if (window.__pjInstall) showButton();
+  else if (isIos) wrap.append(h('p', { class: 'install-tip' }, 'iPhone: tap Share, then "Add to Home Screen" to install.'));
+  document.addEventListener('pj-installable', showButton, { once: true });
+  return wrap;
 }
 
 // Phones: always open in a new tab (embeds of private Google files often

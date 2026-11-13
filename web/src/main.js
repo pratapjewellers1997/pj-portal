@@ -115,3 +115,13 @@ function start() {
 }
 
 start();
+
+// ---- Install as an app (Android/desktop Chrome offer a prompt; iPhone uses Share > Add to Home Screen)
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.__pjInstall = e;
+  document.dispatchEvent(new Event('pj-installable'));
+});

@@ -117,7 +117,7 @@ function draw(body, data) {
       ].filter(Boolean).join(' · '))))));
   }
   parts.push(h('p', { class: 'foot-note' }, `Data refreshed ${fmtDateTime(Date.parse(data.builtAt))}`));
-  body.replaceChildren(...parts);
+  body.replaceChildren(...parts.filter(Boolean));
 }
 
 function table(head, rows) {
