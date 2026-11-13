@@ -1,4 +1,6 @@
 import { h, safeUrl, isPhone } from './dom.js';
+import { renderWork } from './work.js';
+import { renderAttendance } from './attendance.js';
 
 // Function groups in the order agreed in the hand-off.
 const GROUP_ORDER = [
@@ -14,7 +16,48 @@ const TYPE_STYLE = {
   'Training video': 'admin', 'Code file': 'admin', 'Drive folder': 'admin',
 };
 
-export function renderPortal(root, data, { onSignOut }) {
+// Pages inside the portal. The address bar hash picks one (#work, #attendance).
+const PAGES = [
+  { id: 'systems', label: 'Systems' },
+  { id: 'work', label: 'Work' },
+  { id: 'attendance', label: 'Attendance' },
+];
+
+export function renderPortal(root, data, { onSignOut, session }) {
+  const { user } = data;
+  const view = h('div', { class: 'view' });
+  const tabs = h('nav', { class: 'tabs', 'aria-label': 'Portal pages' });
+  const ctx = { user, session, onSignOut };
+
+  root.replaceChildren(
+    h('header', { class: 'top' },
+      h('div', { class: 'top-brand' },
+        h('div', { class: 'monogram sm', 'aria-hidden': 'true' }, 'PJ'),
+        h('div', {}, h('div', { class: 'top-name' }, 'Pratap Jewellers'), h('div', { class: 'top-sub' }, 'Staff portal'))),
+      h('div', { class: 'top-user' },
+        h('span', { class: `role role-${user.role.toLowerCase()}` }, user.role),
+        h('button', { class: 'link-btn', type: 'button', onclick: onSignOut }, 'Sign out'))),
+    tabs,
+    view,
+  );
+
+  function route() {
+    const id = (location.hash || '#systems').slice(1);
+    const page = PAGES.find((p) => p.id === id) || PAGES[0];
+    tabs.replaceChildren(...PAGES.map((p) => h('a', {
+      href: `#${p.id}`, class: `tab${p.id === page.id ? ' on' : ''}`,
+      'aria-current': p.id === page.id ? 'page' : null,
+    }, p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
+    if (page.id === 'work') renderWork(view, ctx);
+    else if (page.id === 'attendance') renderAttendance(view, ctx);
+    else renderSystems(view, data);
+    window.scrollTo(0, 0);
+  }
+  window.onhashchange = route;
+  route();
+}
+
+function renderSystems(root, data) {
   const { user, systems = [] } = data;
   const state = { query: '', group: 'All', open: new Set() };
 
@@ -30,13 +73,6 @@ export function renderPortal(root, data, { onSignOut }) {
   });
 
   root.replaceChildren(
-    h('header', { class: 'top' },
-      h('div', { class: 'top-brand' },
-        h('div', { class: 'monogram sm', 'aria-hidden': 'true' }, 'PJ'),
-        h('div', {}, h('div', { class: 'top-name' }, 'Pratap Jewellers'), h('div', { class: 'top-sub' }, 'Staff portal'))),
-      h('div', { class: 'top-user' },
-        h('span', { class: `role role-${user.role.toLowerCase()}` }, user.role),
-        h('button', { class: 'link-btn', type: 'button', onclick: onSignOut }, 'Sign out'))),
     h('section', { class: 'hero' },
       h('h1', {}, `Namaste, ${firstName}`),
       h('p', {}, [user.designation, `${systems.length} systems`, `${linkCount} links`].filter(Boolean).join(' · ')),

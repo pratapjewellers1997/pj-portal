@@ -83,7 +83,7 @@ async function loadPortal(session, cached) {
     // Don't redraw (and wipe a search being typed) if nothing changed.
     const same = cached && JSON.stringify(cached.systems) === JSON.stringify(data.systems)
       && JSON.stringify(cached.user) === JSON.stringify(data.user);
-    if (!same) renderPortal(root, data, { onSignOut: signOut });
+    if (!same) renderPortal(root, data, { onSignOut: signOut, session });
   } catch (err) {
     if (SESSION_ERRORS.includes(err.message)) {
       store.set(SESSION_KEY, null);
@@ -109,7 +109,7 @@ function start() {
 
   let cached = null;
   try { cached = JSON.parse(store.get(CACHE_KEY) || 'null'); } catch {}
-  if (cached?.user) renderPortal(root, cached, { onSignOut: signOut });
+  if (cached?.user) renderPortal(root, cached, { onSignOut: signOut, session });
   else renderLoading('Loading your portal…');
   loadPortal(session, cached);
 }

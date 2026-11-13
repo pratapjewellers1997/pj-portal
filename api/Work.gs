@@ -19,6 +19,9 @@
  *   4. Health (Admin only) shows each source's rows, time, errors,
  *      unmatched names, snapshot size and age.
  *
+ * Older dates: any range older than the window is read from the sheets on
+ * request (loadHistory_) and cached for 6 hours.
+ *
  * Window kept in the snapshot:
  *   - every task planned in the last WORK_WINDOW_DAYS days (~3 months)
  *   - every task planned in the next WORK_FUTURE_DAYS days
@@ -86,7 +89,8 @@ function testWork() {
 function actionWork_(req) {
   var user = findPerson_(readSession_(req.session));
   var range = parseRange_(req.from, req.to);
-  var data = loadSnapshot_() || buildSnapshotLocked_(60000) || loadSnapshot_();
+  var data = range.historic ? loadHistory_(range)
+           : (loadSnapshot_() || buildSnapshotLocked_(60000) || loadSnapshot_());
   if (!data) throw apiError_('busy');
 
   var now = Date.now();
@@ -130,7 +134,7 @@ function actionWork_(req) {
     ok: true, user: user, scope: isDoer ? 'self' : 'all',
     range: { from: range.fromKey, to: range.toKey },
     names: names, tasks: tasks, attendance: attendance, monthly: monthly,
-    builtAt: data.builtAt
+    builtAt: data.builtAt, historic: Boolean(range.historic)
   };
   if (!isDoer) {
     out.people = people
@@ -148,9 +152,10 @@ function parseRange_(from, to) {
   var t = re.test(to || '') ? to : f;
   if (t < f) { var x = f; f = t; t = x; }
   var fromMs = istMs_(f, '00:00:00'), toMs = istMs_(t, '23:59:59');
-  if (fromMs < Date.now() - WORK_WINDOW_DAYS * DAY_MS) throw apiError_('range_too_old');
   if (toMs - fromMs > (WORK_WINDOW_DAYS + WORK_FUTURE_DAYS) * DAY_MS) throw apiError_('range_too_long');
-  return { from: fromMs, to: toMs, fromKey: f, toKey: t };
+  // Older than the snapshot window (with a 1-day margin): read the sheets for this range.
+  var historic = fromMs < Date.now() - (WORK_WINDOW_DAYS - 1) * DAY_MS;
+  return { from: fromMs, to: toMs, fromKey: f, toKey: t, historic: historic };
 }
 
 /* ================= Snapshot: build, store, load ================= */
@@ -167,11 +172,11 @@ function buildSnapshotLocked_(waitMs) {
   }
 }
 
-function buildSnapshot_() {
+function buildSnapshot_(win) {
   var started = Date.now();
   var sources = loadSourcesCfg_();
-  var cutoff = started - WORK_WINDOW_DAYS * DAY_MS;
-  var horizon = started + WORK_FUTURE_DAYS * DAY_MS;
+  var cutoff = win ? win.from : started - WORK_WINDOW_DAYS * DAY_MS;
+  var horizon = win ? win.to : started + WORK_FUTURE_DAYS * DAY_MS;
 
   // 1. Read every source (one call for tab ids + one batchGet per spreadsheet)
   var raw = sources.map(function (src) {
@@ -227,6 +232,31 @@ function buildSnapshot_() {
       sizeKb: 0, storedIn: []
     }
   };
+}
+
+/**
+ * Older than 3 months: read the sheets for exactly this date range, once.
+ * The result is kept in the script cache for 6 hours (not in Properties),
+ * so the same old range opens instantly after the first time.
+ */
+function loadHistory_(range) {
+  var key = 'hist_v1_' + range.fromKey + '_' + range.toKey;
+  var cache = CacheService.getScriptCache();
+  var packed = joinParts_(function (keys) { return cache.getAll(keys); }, cache.get(key + '_n'), key + '_');
+  if (packed) { try { return unpack_(packed); } catch (e) {} }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(90000)) return null;
+  try {
+    var data = buildSnapshot_({ from: range.from, to: range.to });
+    var p = pack_(data), parts = {}, n = 0;
+    for (var i = 0; i < p.length; i += CACHE_CHUNK) parts[key + '_' + (n++)] = p.substr(i, CACHE_CHUNK);
+    parts[key + '_n'] = String(n);
+    try { cache.putAll(parts, 21600); } catch (e) { console.warn('History cache write failed: ' + e); }
+    return data;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function saveSnapshot_(data) {
