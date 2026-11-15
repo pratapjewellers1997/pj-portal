@@ -17,7 +17,8 @@ const FILTERS = {
   late: ['Received late', (o) => o.status === 'late'],
   overdue: ['Overdue now', (o) => o.status === 'overdue'],
   open: ['Not received yet', (o) => o.status === 'overdue' || o.status === 'waiting'],
-  extended: ['Extended', (o) => o.extended],
+  extended: ['Asked for extension', (o) => o.extended],
+  first: ['First promise missed', (o) => o.received && o.firstPromise && o.received > o.firstPromise],
   qc: ['Failed quality check', (o) => /^no\b/i.test(o.qc || '')],
 };
 const SORTS = {
@@ -26,18 +27,26 @@ const SORTS = {
   worst: ['Most overdue', (a, b) => b.overdue - a.overdue || (b.avgLateDays || 0) - (a.avgLateDays || 0)],
   sales: ['Highest sales', (a, b) => (b.sales?.revenue || 0) - (a.sales?.revenue || 0)],
 };
-let memo = null;
-const state = { sort: 'orders', q: '' };
+const PERIODS = [['3m', 'Last 3 months'], ['thisMonth', 'This month'], ['lastMonth', 'Last month'],
+  ['6m', 'Last 6 months'], ['fy', 'This financial year'], ['all', 'All time']];
+const memo = new Map();
+const state = { sort: 'orders', q: '', period: '3m' };
 
 export function renderVendors(root, ctx) {
-  const body = h('div', { class: 'page-body' }, loadingBox('Loading vendor scorecard…'));
+  const body = h('div', { class: 'page-body' }, loadingBox(state.period === '3m' ? 'Loading vendor scorecard…'
+    : 'Loading vendor scorecard… (older orders can take up to a minute the first time)'));
   root.replaceChildren(
     h('section', { class: 'page-head' },
       h('h1', {}, '⭐ Vendor scorecard'),
-      h('p', {}, 'How each vendor delivers your orders, worked out from the FMS sheets.')),
+      h('p', {}, 'How each vendor delivers your orders, worked out from the FMS sheets.'),
+      h('div', { class: 'chip-row', role: 'group', 'aria-label': 'Period' }, PERIODS.map(([id, label]) => h('button', {
+        type: 'button', class: `chip${state.period === id ? ' on' : ''}`, 'aria-pressed': String(state.period === id),
+        onclick: () => { state.period = id; renderVendors(root, ctx); },
+      }, label)))),
     body);
-  if (!memo) memo = callApi('vendors', { session: ctx.session }).catch((e) => { memo = null; throw e; });
-  memo.then((d) => draw(body, d)).catch((e) => body.replaceChildren(h('div', { class: 'notice error' },
+  const key = state.period;
+  if (!memo.has(key)) memo.set(key, callApi('vendors', { session: ctx.session, period: key }).catch((e) => { memo.delete(key); throw e; }));
+  memo.get(key).then((d) => { if (state.period === key) draw(body, d); }).catch((e) => body.replaceChildren(h('div', { class: 'notice error' },
     h('p', {}, ERRORS[e.message] || 'Could not load the vendor scorecard.'),
     SESSION_ERRORS.includes(e.message)
       ? h('button', { type: 'button', class: 'btn-navy', onclick: ctx.onSignOut }, 'Sign in again')
@@ -63,8 +72,9 @@ function draw(body, d) {
 
   body.replaceChildren(
     warning(d),
+    ...(d.note ? [h('p', { class: 'notice' }, d.note)] : []),
     h('p', { class: 'muted-sm' },
-      `Orders issued to a vendor from ${fmtDay(d.window.from)} to ${fmtDay(d.window.to)} (last 3 months)`,
+      d.window.all ? `All orders issued to a vendor, up to ${fmtDay(d.window.to)}` : `Orders issued to a vendor from ${fmtDay(d.window.from)} to ${fmtDay(d.window.to)}`,
       d.sales ? ` · Sales: GP data up to ${d.sales.upTo ? fmtDay(d.sales.upTo) : '— (no data fed yet)'}` : '',
       '. Tap any number to see the orders behind it.'),
     h('div', { class: 'vs-tools' }, search, h('label', { class: 'select' }, h('span', {}, 'Sort'), sortSel)),
@@ -90,14 +100,15 @@ function warning(d) {
     h('ol', { class: 'vs-steps' },
       h('li', {}, 'Open the Order to Delivery FMS and filter the ', h('b', {}, 'Vendor Name'), ' (or Confirmed Vendor) column to the vendor you are checking.'),
       h('li', {}, 'Keep only rows where ', h('b', {}, 'Issue Order to Supplier → Actual'), ' is filled and falls in the period shown above. Count them: this is ', h('b', {}, 'Orders'), '.'),
-      h('li', {}, 'For each row, Promised date = the day of "Issue Order to Supplier → Actual" + ', h('b', {}, 'Delivery Time'), ' days (till end of that day).'),
-      h('li', {}, 'Compare with ', h('b', {}, 'Product Recieved from Vendor → Actual'), '. On or before Promised = ', h('b', {}, 'On time'), '; after = ', h('b', {}, 'Late'), '; blank and Promised has passed = ', h('b', {}, 'Overdue'), '.'),
-      h('li', {}, 'Count rows with ', h('b', {}, 'Extended Delivery Time'), ' or ', h('b', {}, 'Extended Date'), ' filled: this is ', h('b', {}, 'Extended'), '. Rows where ', h('b', {}, 'Order Quality Check ?'), ' is "No": ', h('b', {}, 'QC failed'), '.'),
+      h('li', {}, h('b', {}, 'Delivery Time'), ` is customer days (vendor days + ${d.bufferDays}). So the vendor's first promise = the day of "Issue Order to Supplier → Actual" + (Delivery Time − ${d.bufferDays}) days, till the end of that day.`),
+      h('li', {}, 'If ', h('b', {}, 'Follow up with Supplier ?'), ' is ', h('b', {}, 'Yes'), ', the vendor asked for more time: the agreed vendor date becomes ', h('b', {}, 'Extended Date'), ` (the vendor's date). If Extended Date is blank: the follow-up Actual day + (Extended Delivery Time − ${d.bufferDays}) days. Count these rows: this is `, h('b', {}, 'Extended'), '.'),
+      h('li', {}, 'Compare ', h('b', {}, 'Product Recieved from Vendor → Actual'), ' with the agreed vendor date. On or before = ', h('b', {}, 'On time'), '; after = ', h('b', {}, 'Late'), '; still blank after that date = ', h('b', {}, 'Overdue'), '. Compared with the first promise instead = ', h('b', {}, 'First promise kept'), '.'),
+      h('li', {}, 'Rows where ', h('b', {}, 'Order Quality Check ?'), ' is "No" = ', h('b', {}, 'QC failed'), '; "Return to Vendor" done = ', h('b', {}, 'Returned'), '.'),
       h('li', {}, 'In the Purchase to Display FMS, filter ', h('b', {}, 'Vendor Name'), ' and count receipts and Number of Pieces for the same period.'),
       d.canSeeSales ? h('li', {}, '(Owners/MIS) In the GP Feeder System open ', h('b', {}, 'gp_vendor_wise'), ', pick the same months and compare that vendor\'s Revenue and GP.') : null,
       h('li', {}, 'If a number does not match, look for: a blank Actual date, a missing Delivery Time, a vendor name spelt differently or without its code, or rows entered late. Fix the sheet; the portal updates within about 10 minutes.')),
     h('h3', {}, 'How the stars work'),
-    h('p', {}, 'Stars come from On time % (needs at least 3 received orders with a Delivery Time): 90%+ ★★★★★ · 75%+ ★★★★ · 60%+ ★★★ · 40%+ ★★ · below ★. One star less if more than 20% of quality checks failed. Vendors are matched by the code in brackets, e.g. "AALOK (A01)".'));
+    h('p', {}, 'Stars come from On time % against the agreed vendor date (needs at least 3 received orders with a Delivery Time): 90%+ ★★★★★ · 75%+ ★★★★ · 60%+ ★★★ · 40%+ ★★ · below ★. One star less if more than 20% of quality checks failed. Vendors are matched by the code in brackets, e.g. "AALOK (A01)".'));
   const btn = h('button', {
     type: 'button', class: 'vs-how-btn', 'aria-expanded': 'false',
     onclick: () => {
@@ -140,7 +151,8 @@ function vendorCard(v, d) {
     tile(v.onTimePct == null ? '—' : `${v.onTimePct}%`, `on time (${v.onTime}/${v.onTime + v.late})`, 'on_time', v.onTimePct == null ? '' : v.onTimePct >= 75 ? 'green' : v.onTimePct >= 50 ? 'amber' : 'red'),
     tile(v.avgLateDays == null ? '—' : `${v.avgLateDays}d`, `avg late (${v.late} late)`, 'late', v.late ? 'red' : ''),
     tile(v.overdue, `overdue now · ${v.open} open`, 'overdue', v.overdue ? 'red' : ''),
-    tile(v.extended, 'extended', 'extended', v.extended ? 'amber' : ''),
+    tile(v.firstKeptPct == null ? '—' : `${v.firstKeptPct}%`, `first promise kept (${v.firstKept}/${v.firstJudged})`, 'first', v.firstKeptPct == null ? '' : v.firstKeptPct >= 75 ? 'green' : v.firstKeptPct >= 50 ? 'amber' : 'red'),
+    tile(v.extended, 'asked for extension', 'extended', v.extended ? 'amber' : ''),
     tile(v.qcDone ? `${v.qcFail}/${v.qcDone}` : '—', `QC failed${v.returned ? ` · ${v.returned} returned` : ''}`, 'qc', v.qcFail ? 'red' : ''),
   ] : [];
 
@@ -168,14 +180,16 @@ function orderRow(o) {
       h('span', { class: `pill pill-${tone}` }, label + (o.lateDays ? ` · ${o.lateDays}d` : ''))),
     o.customer ? h('div', { class: 'muted-sm' }, o.order) : null,
     h('div', { class: 'task-meta' },
-      `Issued ${fmtDateTime(o.issued)}`,
-      o.promised ? ` · Promised ${fmtDateTime(o.promised)}` : ' · No Delivery Time',
+      `Issued ${fmtDay(o.issued)}`,
+      o.firstPromise ? ` · First promise ${fmtDay(o.firstPromise)}` : ' · No Delivery Time',
+      o.extended && o.agreed && o.agreed !== o.firstPromise ? ` · Extended to ${fmtDay(o.agreed)}` : '',
       o.received ? ` · Received ${fmtDateTime(o.received)}` : ''),
     (o.extended || o.qc || o.returned) ? h('div', { class: 'task-meta' },
-      [o.extended ? 'Extended' : '', o.qc ? `QC: ${o.qc}` : '', o.returned ? 'Returned to vendor' : ''].filter(Boolean).join(' · ')) : null,
+      [o.extended ? `Extension (${o.extensionNote})` : '', o.qc ? `QC: ${o.qc}` : '', o.returned ? 'Returned to vendor' : ''].filter(Boolean).join(' · ')) : null,
     url ? h('a', { class: 'task-open', href: url, target: '_blank', rel: 'noopener' }, 'Open row in sheet ↗') : null);
 }
 
-function fmtDay(key) {
-  return new Date(`${key}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+function fmtDay(v) {
+  const d = typeof v === 'number' ? new Date(v) : new Date(`${v}T00:00:00`);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }

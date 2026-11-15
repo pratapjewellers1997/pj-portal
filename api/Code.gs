@@ -18,7 +18,7 @@
  *   lookup {session, q}  -> {ok, items: [{system, key, label, steps}]}  (Step 6)
  *   insights {session, from, to} -> {ok, funnels, turnaround, celebrations}  (Step 7)
  *   karigar {session} -> {ok, items}  (Step 10: items still with karigars)
- *   vendors {session} -> {ok, vendors, orders, sources}  (Step 11, Vendors.gs)
+ *   vendors {session, period} -> {ok, vendors, orders, sources}  (Step 11, Vendors.gs)
  *   social / postNotice / readNotice / removeNotice / giveKudos / removeKudos     (Step 8, Social.gs)
  */
 
