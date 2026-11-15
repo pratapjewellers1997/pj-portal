@@ -148,6 +148,7 @@ function actionWork_(req) {
     range: { from: range.fromKey, to: range.toKey },
     names: names, tasks: tasks, attendance: attendance, monthly: monthly,
     celebrations: celebrations_(data.joins || []),
+    pratap: range.historic ? null : todayAtPratap_(data.joins || [], people),
     builtAt: data.builtAt, historic: Boolean(range.historic)
   };
   if (!isDoer) {
@@ -214,6 +215,45 @@ function celebrations_(joins) {
     seen[j.email] = true;
     return { email: j.email, name: j.name, date: date, years: years, today: date === today };
   }).filter(Boolean).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+}
+
+/**
+ * Home card "Today at Pratap" (Step 9): work anniversaries today and in the
+ * next 6 days (1 year or more), and staff who joined in the last 30 days.
+ * Active staff in the People tab only, so people who have left never appear.
+ */
+function todayAtPratap_(joins, people) {
+  var D = 864e5, pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  var todayKey = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  var base = Date.UTC(Number(todayKey.slice(0, 4)), Number(todayKey.slice(5, 7)) - 1, Number(todayKey.slice(8, 10)));
+  var active = {};
+  people.forEach(function (p) {
+    if (p.active && p.accountType !== 'Alias') p.emails.forEach(function (e) { active[e] = p; });
+  });
+  var anniversaries = [], joined = [], seen = {};
+  joins.forEach(function (j) {
+    var p = active[j.email];
+    if (!p || seen[p.emails[0]] || !/^\d{4}-\d{2}-\d{2}$/.test(j.doj)) return;
+    seen[p.emails[0]] = true;
+    var jy = Number(j.doj.slice(0, 4)), jm = Number(j.doj.slice(5, 7)) - 1, jd = Number(j.doj.slice(8, 10));
+    var who = { email: p.emails[0], name: p.name || j.name, designation: p.designation || '' };
+    var since = Math.round((base - Date.UTC(jy, jm, jd)) / D);
+    if (since >= 0 && since <= 30) {
+      joined.push({ email: who.email, name: who.name, designation: who.designation, date: j.doj, days: since });
+    }
+    for (var add = 0; add < 7; add++) {
+      var d = new Date(base + add * D);
+      if (d.getUTCMonth() === jm && d.getUTCDate() === jd) {
+        var years = d.getUTCFullYear() - jy;
+        if (years >= 1) anniversaries.push({ email: who.email, name: who.name, designation: who.designation,
+          date: d.getUTCFullYear() + '-' + pad(jm + 1) + '-' + pad(jd), years: years, inDays: add });
+        break;
+      }
+    }
+  });
+  anniversaries.sort(function (a, b) { return a.inDays - b.inDays || (a.name < b.name ? -1 : 1); });
+  joined.sort(function (a, b) { return a.days - b.days; });
+  return { date: todayKey, anniversaries: anniversaries, joined: joined };
 }
 
 /**

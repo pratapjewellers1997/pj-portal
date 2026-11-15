@@ -13,6 +13,9 @@ const STATUS = {
 };
 const state = { system: '', q: '' };
 
+/** Used by Search: open the Board with this customer / order already looked up. */
+export function setBoardQuery(q) { state.q = String(q || ''); }
+
 export function renderBoard(root, ctx) {
   const results = h('div', { class: 'lookup-results', 'aria-live': 'polite' });
   const input = h('input', {

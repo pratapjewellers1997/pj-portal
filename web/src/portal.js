@@ -4,7 +4,8 @@ import { renderAttendance } from './attendance.js';
 import { renderBoard } from './board.js';
 import { renderScores } from './scores.js';
 import { renderProfile } from './profile.js';
-import { renderInsights, celebrationsBox } from './insights.js';
+import { renderInsights } from './insights.js';
+import { renderSearch } from './search.js';
 import { noticeBoard, kudosWall } from './social.js';
 import { loadWork, ymd } from './workdata.js';
 
@@ -37,7 +38,7 @@ export function renderPortal(root, data, { onSignOut, session }) {
   const pages = PAGES.filter((p) => p.notFor !== user.role);
   const view = h('div', { class: 'view' });
   const tabs = h('nav', { class: 'tabs', 'aria-label': 'Portal pages' });
-  const ctx = { user, session, onSignOut };
+  const ctx = { user, session, onSignOut, systems: data.systems || [], linkButton };
 
   root.replaceChildren(
     h('header', { class: 'top' },
@@ -45,6 +46,7 @@ export function renderPortal(root, data, { onSignOut, session }) {
         h('img', { src: './brand/monogram.png', alt: '', class: 'logo-mono', width: '40', height: '40' }),
         h('div', {}, h('div', { class: 'top-name' }, 'Pratap Jewellers'), h('div', { class: 'top-sub' }, 'Staff portal'))),
       h('div', { class: 'top-user' },
+        h('a', { href: '#search', class: 'top-search', 'aria-label': 'Search everything', title: 'Search' }, '🔍'),
         h('span', { class: `role role-${user.role.toLowerCase()}` }, user.role),
         h('button', { class: 'link-btn', type: 'button', onclick: onSignOut }, 'Sign out'))),
     tabs,
@@ -53,6 +55,13 @@ export function renderPortal(root, data, { onSignOut, session }) {
 
   function route() {
     const [id, param] = (location.hash || '#systems').slice(1).split('/');
+    if (id === 'search') {
+      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
+        p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
+      renderSearch(view, ctx, decodeURIComponent((location.hash.split('/').slice(1).join('/')) || ''));
+      window.scrollTo(0, 0);
+      return;
+    }
     if (id === 'person') {
       tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
         p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
@@ -87,9 +96,22 @@ function renderSystems(root, data, ctx) {
 
   const main = h('main', { class: 'content', id: 'content' });
   const chips = h('nav', { class: 'groups', 'aria-label': 'Function groups' });
+  const everywhere = h('a', { class: 'gs-hint', hidden: true });
   const search = h('input', {
-    class: 'search', type: 'search', placeholder: 'Search systems, sheets, dashboards…',
-    'aria-label': 'Search', oninput: (e) => { state.query = e.target.value.trim().toLowerCase(); draw(); },
+    class: 'search', type: 'search', placeholder: 'Search systems, customers, orders, people…',
+    'aria-label': 'Search', enterkeyhint: 'search',
+    oninput: (e) => {
+      const raw = e.target.value.trim();
+      state.query = raw.toLowerCase();
+      everywhere.hidden = raw.length < 2;
+      everywhere.href = `#search/${encodeURIComponent(raw)}`;
+      everywhere.textContent = `🔎 Search everywhere for “${raw}” →`;
+      draw();
+    },
+    onkeydown: (e) => {
+      const raw = e.target.value.trim();
+      if (e.key === 'Enter' && raw.length >= 2) location.hash = `#search/${encodeURIComponent(raw)}`;
+    },
   });
 
   root.replaceChildren(...[
@@ -97,6 +119,7 @@ function renderSystems(root, data, ctx) {
       h('h1', {}, `Namaste, ${firstName}`),
       h('p', {}, [user.designation, `${systems.length} systems`, `${linkCount} links`].filter(Boolean).join(' · ')),
       search,
+      everywhere,
       installHint()),
     noticeBoard(ctx),
     todayCard(ctx),
@@ -278,8 +301,8 @@ function todayCard(ctx) {
         stat(todayTotal ? `${Math.round((doneToday / todayTotal) * 100)}%` : '—', 'of today done', 'green'),
         stat(att.length, `checked in${late ? ` · ${late} late` : ''}`));
     }
-    const cel = (d.celebrations || []).filter((c) => c.today);
-    if (cel.length) box.after(celebrationsBox(cel));
+    const pc = pratapCard(d.pratap, isDoer);
+    if (pc) box.after(pc);
     box.replaceChildren(
       h('div', { class: 'today-head' }, h('strong', {}, isDoer ? 'Your day' : 'Team today'),
         h('span', { class: 'today-links' },
@@ -288,6 +311,35 @@ function todayCard(ctx) {
       h('div', { class: 'today-stats' }, parts));
   }).catch(() => box.remove());
   return box;
+}
+
+/* ---------- Today at Pratap: anniversaries this week and new joiners ---------- */
+
+function pratapCard(p, isDoer) {
+  if (!p) return null;
+  const ann = p.anniversaries || [], joined = p.joined || [];
+  if (!ann.length && !joined.length) return null;
+  const now = ann.filter((a) => a.inDays === 0), soon = ann.filter((a) => a.inDays > 0);
+  const yrs = (n) => `${n} year${n === 1 ? '' : 's'}`;
+  const day = (k) => new Date(`${k}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  const profile = (x) => `#person/${encodeURIComponent(x.email)}`;
+  // Doers can only open their own profile, so names are plain text for them.
+  const nameEl = (x) => (isDoer ? h('b', {}, x.name) : h('a', { href: profile(x), class: 'pc-name' }, x.name));
+  const row = (emoji, x, text, action) => h('li', {},
+    h('span', { class: 'pc-emoji', 'aria-hidden': 'true' }, emoji),
+    h('div', { class: 'pc-text' }, nameEl(x), h('span', {}, text)),
+    action || null);
+  return h('section', { class: 'pratap' },
+    h('div', { class: 'pc-head' }, h('strong', {}, '🎂 Today at Pratap'), h('span', { class: 'muted-sm' }, day(p.date))),
+    now.length ? h('ul', { class: 'pc-list pc-now' }, now.map((a) => row('🎉', a,
+      `completes ${yrs(a.years)} with Pratap Jewellers today`,
+      isDoer ? null : h('a', { href: profile(a), class: 'pc-act' }, '👏 Appreciate')))) : null,
+    soon.length ? h('div', { class: 'pc-sub' }, 'Work anniversaries this week') : null,
+    soon.length ? h('ul', { class: 'pc-list' }, soon.map((a) => row('📅', a,
+      `${yrs(a.years)} · ${a.inDays === 1 ? 'tomorrow' : day(a.date)}`))) : null,
+    joined.length ? h('div', { class: 'pc-sub' }, 'Welcome to the team') : null,
+    joined.length ? h('ul', { class: 'pc-list' }, joined.map((j) => row('👋', j,
+      `${j.designation ? j.designation + ' · ' : ''}joined ${j.days === 0 ? 'today' : day(j.date)}`))) : null);
 }
 
 function stat(value, label, tone = '') {

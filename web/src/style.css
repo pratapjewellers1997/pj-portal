@@ -447,3 +447,42 @@ table.scores td.sc { text-align: center; min-width: 70px; }
   .content { padding: 8px 32px 32px 16px; }
   .cards { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 }
+
+/* ---------- Step 9: Global search + Today at Pratap ---------- */
+.top-search { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.1); text-decoration: none; font-size: 17px; }
+.top-search:hover, .top-search:focus-visible { background: rgba(201,162,75,0.35); }
+.gs-hint { display: inline-block; margin-top: 10px; color: var(--gold); font-weight: 600; font-size: 14px; text-decoration: none; }
+.gs-hint:hover { text-decoration: underline; }
+.gs-input { margin-top: 10px; }
+.gs-results { display: grid; gap: 6px; }
+.gs-section .section-title { display: flex; align-items: center; gap: 8px; }
+.gs-section .count { font-size: 12px; font-weight: 600; background: var(--gold-soft); color: var(--gold-dark); border-radius: 999px; padding: 1px 8px; }
+.gs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gs-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; color: var(--ink); text-decoration: none; font: inherit; cursor: pointer; min-height: 52px; }
+.gs-row:hover, .gs-row:focus-visible { border-color: var(--gold); }
+.gs-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.gs-main b { color: var(--navy); overflow-wrap: anywhere; }
+.gs-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--navy); color: var(--gold); font-weight: 700; font-size: 13px; display: grid; place-items: center; flex: none; }
+.gs-row .chev { color: var(--muted); font-size: 20px; }
+.gs-links li { display: grid; gap: 2px; }
+.gs-sys { padding-left: 4px; }
+.gs-more { margin-top: 8px; }
+.gs-tips { color: var(--muted); background: #fff; border: 1px dashed var(--line); border-radius: 12px; padding: 12px 16px; }
+.gs-tips p { margin: 0 0 4px; font-weight: 600; color: var(--navy); }
+.gs-tips ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+
+.pratap { margin: 12px 16px 0; background: #fff; border: 1px solid #E9D9A8; border-left: 4px solid var(--gold); border-radius: 0 14px 14px 0; padding: 12px 14px; }
+.pc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.pc-head strong { color: var(--navy); font-size: 16px; }
+.pc-sub { margin: 10px 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--gold-dark); }
+.pc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pc-list li { display: flex; align-items: center; gap: 10px; }
+.pc-emoji { font-size: 20px; width: 26px; text-align: center; flex: none; }
+.pc-text { display: flex; flex-direction: column; flex: 1; min-width: 0; font-size: 14px; }
+.pc-text span { color: var(--muted); font-size: 13px; }
+.pc-name, .pc-text b { color: var(--navy); font-weight: 700; text-decoration: none; }
+.pc-name:hover { text-decoration: underline; }
+.pc-now li { background: var(--gold-soft); border-radius: 10px; padding: 8px 10px; }
+.pc-act { flex: none; font-size: 13px; font-weight: 600; color: var(--navy); background: #fff; border: 1px solid #E9D9A8; border-radius: 999px; padding: 5px 10px; text-decoration: none; }
+@media (min-width: 900px) { .pratap { margin: 12px auto 0; max-width: 1100px; } }
+@media (min-width: 1000px) { .gs-input { max-width: 720px; } .pratap { margin-left: 32px; margin-right: 32px; } }
