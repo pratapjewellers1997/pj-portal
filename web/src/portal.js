@@ -373,7 +373,10 @@ function installHint() {
 function openLink(sys, link) {
   const url = safeUrl(link.url);
   const embed = safeUrl(link.embedUrl);
-  if (link.showAs === 'Embed' && embed && !isPhone()) {
+  // Drive folders can't be shown inside the portal (Google answers 403), so
+  // they always open in a new tab, whatever "Show as" says in the Registry.
+  const isFolder = /drive\.google\.com\/(drive\/)?(u\/\d+\/)?folders\//.test(String(link.url || ''));
+  if (link.showAs === 'Embed' && embed && !isPhone() && !isFolder) {
     openViewer(sys, link, embed, url);
   } else if (url) {
     window.open(url, '_blank', 'noopener');
