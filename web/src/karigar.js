@@ -21,7 +21,9 @@ const daysText = (d) => (d == null ? 'date not known' : d === 0 ? 'since today' 
 
 /** Compact line for the home page. Hidden when there is nothing with a karigar. */
 export function karigarLine(ctx) {
-  const box = h('a', { href: '#board', class: 'kg-line', hidden: true });
+  // The list sits below the Steps board, so jump down to it once the page has loaded.
+  const box = h('a', { href: '#board', class: 'kg-line', hidden: true,
+    onclick: () => setTimeout(() => { const el = document.getElementById('karigars'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 900) });
   loadKarigar(ctx.session).then((d) => {
     if (!d.items.length) return;
     const old = d.items.filter((it) => daysWith(it) > 7).length;

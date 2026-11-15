@@ -511,3 +511,4 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 .kg-line .chev { color: var(--muted); font-size: 20px; }
 @media (min-width: 700px) { .kg-list { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); } }
 @media (min-width: 1000px) { .kg-line { margin-left: 32px; margin-right: 32px; } }
+#karigars { scroll-margin-top: calc(var(--head-h) + var(--tabs-h) + 12px); }
