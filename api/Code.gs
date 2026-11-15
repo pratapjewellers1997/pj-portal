@@ -18,6 +18,7 @@
  *   lookup {session, q}  -> {ok, items: [{system, key, label, steps}]}  (Step 6)
  *   insights {session, from, to} -> {ok, funnels, turnaround, celebrations}  (Step 7)
  *   karigar {session} -> {ok, items}  (Step 10: items still with karigars)
+ *   vendors {session} -> {ok, vendors, orders, sources}  (Step 11, Vendors.gs)
  *   social / postNotice / readNotice / removeNotice / giveKudos / removeKudos     (Step 8, Social.gs)
  */
 
@@ -36,6 +37,7 @@ function doPost(e) {
       case 'lookup': return json_(actionLookup_(req));
       case 'insights': return json_(actionInsights_(req));
       case 'karigar':  return json_(actionKarigar_(req));
+      case 'vendors':  return json_(actionVendors_(req));
       case 'social':       return json_(actionSocial_(req));
       case 'postNotice':   return json_(actionPostNotice_(req));
       case 'readNotice':   return json_(actionReadNotice_(req));

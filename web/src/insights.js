@@ -25,6 +25,7 @@ export function renderInsights(root, ctx) {
     h('section', { class: 'page-head' },
       h('h1', {}, 'Insights'),
       h('p', {}, 'Sales conversion and turnaround, worked out from your FMS sheets.'),
+      h('a', { href: '#vendors', class: 'vs-link' }, '⭐ Vendor scorecard →'),
       h('div', { class: 'chip-row', role: 'group', 'aria-label': 'Period' }, PERIODS.map(([id, label]) => h('button', {
         type: 'button', class: `chip${state.period === id ? ' on' : ''}`, 'aria-pressed': String(state.period === id),
         onclick: () => { state.period = id; renderInsights(root, ctx); },

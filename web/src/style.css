@@ -512,3 +512,42 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 @media (min-width: 700px) { .kg-list { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); } }
 @media (min-width: 1000px) { .kg-line { margin-left: 32px; margin-right: 32px; } }
 #karigars { scroll-margin-top: calc(var(--head-h) + var(--tabs-h) + 12px); }
+
+/* ---------- Step 11: Vendor scorecard ---------- */
+.vs-link { display: inline-block; margin: 2px 0 10px; color: var(--gold); font-weight: 600; text-decoration: none; }
+.vs-link:hover { text-decoration: underline; }
+.vs-warn { background: var(--amber-bg); border: 1px solid #EBCB85; border-radius: 12px; padding: 10px 14px; margin: 6px 0 10px; color: #4A3A12; font-size: 14px; }
+.vs-warn-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.vs-warn-row > span { flex: 1 1 260px; }
+.vs-how-btn { flex: none; background: #fff; color: var(--navy); border: 1px solid #D9B45C; border-radius: 999px; padding: 7px 14px; font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; }
+.vs-how { margin-top: 10px; background: #fff; border-radius: 10px; padding: 10px 14px; color: var(--ink); }
+.vs-how h3 { font-size: 15px; margin: 10px 0 6px; color: var(--navy); }
+.vs-how h3:first-child { margin-top: 2px; }
+.vs-sources, .vs-steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.vs-sources a { color: var(--navy); font-weight: 600; }
+.vs-tools { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 8px 0 12px; }
+.vs-search { flex: 2 1 220px; margin: 0; min-height: 42px; }
+.vs-tools .select { flex: 1 1 160px; }
+.vs-grid { display: grid; gap: 12px; }
+.vs-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.vs-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.vs-head h3 { margin: 0; font-size: 16px; color: var(--navy); }
+.vs-stars { color: var(--gold); font-size: 18px; letter-spacing: 1px; white-space: nowrap; }
+.vs-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.vs-tile { display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: var(--cream); border: 1px solid transparent; border-radius: 10px; padding: 7px 9px; font: inherit; cursor: pointer; color: var(--ink); }
+.vs-tile:hover:not([disabled]), .vs-tile:focus-visible { border-color: var(--gold); }
+.vs-tile[disabled] { cursor: default; }
+.vs-tile b { font-size: 19px; color: var(--navy); line-height: 1.15; }
+.vs-tile span { font-size: 12px; color: var(--muted); }
+.vs-tile.t-green b { color: var(--green); } .vs-tile.t-amber b { color: var(--amber); } .vs-tile.t-red b { color: var(--red); }
+.vs-line { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
+.vs-sales b { color: var(--navy); }
+.vs-drill { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.vs-drill-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.vs-orders { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.vs-order { background: var(--cream); border-radius: 10px; padding: 8px 10px; display: grid; gap: 2px; }
+.vs-order-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.vs-order-top b { color: var(--navy); }
+@media (min-width: 900px) { .vs-grid { grid-template-columns: repeat(2, 1fr); align-items: start; } .vs-tiles { grid-template-columns: repeat(6, 1fr); } }
+@media (min-width: 900px) { .vs-grid .vs-tiles { grid-template-columns: repeat(3, 1fr); } }
+.gs-more, .vs-close { color: var(--navy); opacity: 1; font-weight: 600; text-decoration: underline; }

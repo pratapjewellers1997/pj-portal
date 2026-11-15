@@ -7,6 +7,7 @@ import { renderProfile } from './profile.js';
 import { renderInsights } from './insights.js';
 import { renderSearch } from './search.js';
 import { karigarLine } from './karigar.js';
+import { renderVendors } from './vendors.js';
 import { noticeBoard, kudosWall } from './social.js';
 import { loadWork, ymd } from './workdata.js';
 
@@ -56,6 +57,13 @@ export function renderPortal(root, data, { onSignOut, session }) {
 
   function route() {
     const [id, param] = (location.hash || '#systems').slice(1).split('/');
+    if (id === 'vendors') {
+      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
+        p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
+      renderVendors(view, ctx);
+      window.scrollTo(0, 0);
+      return;
+    }
     if (id === 'search') {
       tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
         p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));

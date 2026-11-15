@@ -37,6 +37,7 @@ export function renderBoard(root, ctx) {
     h('section', { class: 'page-head' },
       h('h1', {}, 'Board'),
       h('p', {}, 'Where every order stands, step by step.'),
+      h('a', { href: '#vendors', class: 'vs-link' }, '⭐ Vendor scorecard →'),
       h('div', { class: 'lookup-bar' }, input,
         h('button', { type: 'button', class: 'btn-navy', onclick: runLookup }, 'Find')),
       err),

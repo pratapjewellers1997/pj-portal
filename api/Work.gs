@@ -419,7 +419,7 @@ function buildSnapshot_(win) {
   var names = buildNameMap_(raw);
 
   // 3. Turn each source into tasks / attendance
-  var tasks = [], bases = {}, attendance = [], monthly = [], liveToday = 0, items = {}, joins = [], karigar = [];
+  var tasks = [], bases = {}, attendance = [], monthly = [], liveToday = 0, items = {}, joins = [], karigar = [], gp = null;
   raw.forEach(function (r) {
     if (!r.book) return;
     var t0 = Date.now();
@@ -431,6 +431,9 @@ function buildSnapshot_(win) {
         joins = joins.concat(att.joins || []);
         liveToday += att.liveToday;
         r.health.rows = att.days.length;
+      } else if (r.src.type === 'GP') {
+        gp = parseGp_(r.src, r.book);
+        r.health.rows = gp.lines;
       } else if (r.src.type === 'Karigar') {
         var kb = r.src.sysId + '|' + r.src.tab;
         bases[kb] = r.book.url + '/edit#gid=' + (r.book.gids[r.src.tab] || 0) + '&range=A';
@@ -462,7 +465,7 @@ function buildSnapshot_(win) {
 
   return {
     tasks: tasks, bases: bases, attendance: attendance, monthly: monthly, items: items, joins: joins,
-    karigar: karigar,
+    karigar: karigar, gp: gp,
     builtAt: new Date().toISOString(),
     health: {
       sources: raw.map(function (r) { return r.health; }),
@@ -573,6 +576,15 @@ function readBook_(src) {
   if (src.type === 'FMS') { want[src.tab] = q_(src.tab); want['Doer Emails'] = q_('Doer Emails') + '!A:C'; want['DB_Format'] = q_('DB_Format') + '!A:J'; }
   if (src.type === 'Checklist') want[src.tab] = q_(src.tab) + '!A:Z';
   if (src.type === 'Delegation') want[src.tab] = q_(src.tab) + '!A:Z';
+  if (src.type === 'GP') {
+    // GP Feeder gp_master_log: Date (C), Pcs (K), Revenue (S), GP (U), Sup Code + Vendor Name (W:X).
+    // Customer names, rates and costs are never read.
+    want[src.tab] = q_(src.tab) + '!C:C';
+    want[src.tab + '|K'] = q_(src.tab) + '!K:K';
+    want[src.tab + '|S'] = q_(src.tab) + '!S:S';
+    want[src.tab + '|U'] = q_(src.tab) + '!U:U';
+    want[src.tab + '|W'] = q_(src.tab) + '!W:X';
+  }
   if (src.type === 'Karigar') {
     // Repair web app: issued items (A:L) and, from Repair_Received, only the
     // Repair ID / date (A:B) and Status..Reversal (R:U). Amounts and the
@@ -732,7 +744,9 @@ function parseFms_(src, book, names, cutoff, horizon) {
   }
 
   var ATTRS = ['enquiry for', 'handled by ?', 'handled by', 'assign to', 'kaarigar name', 'vendor name',
-               'customer type', 'via', 'delivery type', 'product name'];
+               'customer type', 'via', 'delivery type', 'product name',
+               // Vendor scorecard (Step 11): O2D promise / extension, P2D pieces
+               'order number', 'confirmed vendor', 'delivery time', 'extended delivery time', 'extended date', 'number of pieces'];
   var attrCols = ATTRS.map(function (n) { return [n.replace(' ?', ''), labels.indexOf(n)]; })
     .filter(function (x) { return x[1] > -1; });
   var items = {};

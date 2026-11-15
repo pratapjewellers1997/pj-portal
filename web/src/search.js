@@ -19,6 +19,7 @@ const PAGE_LIST = [
   { id: 'board', label: 'Board', desc: 'Where every order stands, step by step', words: 'board steps order orders repair customer status kanban' },
   { id: 'scores', label: 'Scores', desc: 'Done on time %, week by week', words: 'scores score on time performance week weekly rank best' },
   { id: 'insights', label: 'Insights', desc: 'Sales funnel, turnaround, anniversaries', words: 'insights funnel sales enquiry conversion turnaround kaarigar karigar vendor anniversary', notFor: 'Doer' },
+  { id: 'vendors', label: 'Vendor scorecard', desc: 'On-time delivery, delays and quality by vendor', words: 'vendor vendors supplier suppliers scorecard rating stars delivery delay quality' },
   { id: 'attendance', label: 'Attendance', desc: 'Check-in times, late days, monthly summary', words: 'attendance check in late present absent leave month summary' },
   { id: 'person/', label: 'My profile', desc: 'Your score trend, open tasks and appreciation', words: 'profile me my kudos appreciation' },
 ];
