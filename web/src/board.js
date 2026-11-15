@@ -40,8 +40,9 @@ export function renderBoard(root, ctx) {
       h('div', { class: 'lookup-bar' }, input,
         h('button', { type: 'button', class: 'btn-navy', onclick: runLookup }, 'Find')),
       err),
-    h('div', { class: 'page-body' }, results, karigarSection(ctx)),
-    body);
+    h('div', { class: 'page-body' }, results),
+    body,
+    h('div', { class: 'page-body' }, karigarSection(ctx)));
   if (state.q) lookup(results, ctx, state.q);
 
   body.replaceChildren(loadingBox('Loading board…'));
