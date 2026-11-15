@@ -486,3 +486,28 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 .pc-act { flex: none; font-size: 13px; font-weight: 600; color: var(--navy); background: #fff; border: 1px solid #E9D9A8; border-radius: 999px; padding: 5px 10px; text-decoration: none; }
 @media (min-width: 900px) { .pratap { margin: 12px auto 0; max-width: 1100px; } }
 @media (min-width: 1000px) { .gs-input { max-width: 720px; } .pratap { margin-left: 32px; margin-right: 32px; } }
+
+/* ---------- Step 10: Items with karigars ---------- */
+.kg { margin-top: 8px; }
+.kg .section-title { display: flex; align-items: center; gap: 8px; }
+.kg .section-title .count, .kg-chips .count { font-size: 12px; font-weight: 600; background: var(--gold-soft); color: var(--gold-dark); border-radius: 999px; padding: 1px 8px; }
+.kg-chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 10px; }
+.kg-chips .chip { flex: none; }
+.kg-list { display: grid; gap: 10px; }
+.kg-card { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--green); border-radius: 0 12px 12px 0; padding: 10px 12px; display: grid; gap: 3px; }
+.kg-card.kg-amber { border-left-color: #D79A1E; }
+.kg-card.kg-red { border-left-color: var(--red); }
+.kg-card.kg-gray { border-left-color: #B9B5AA; }
+.kg-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.kg-top strong { color: var(--navy); }
+.kg-desc { font-size: 14px; }
+.kg-line { display: flex; align-items: center; gap: 10px; margin: 12px 16px 0; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; color: var(--ink); text-decoration: none; }
+.kg-line[hidden] { display: none; }
+.kg-line:hover, .kg-line:focus-visible { border-color: var(--gold); }
+.kg-ico { font-size: 20px; }
+.kg-text { flex: 1; min-width: 0; font-size: 14px; }
+.kg-text b { color: var(--navy); }
+.kg-text span { color: var(--muted); }
+.kg-line .chev { color: var(--muted); font-size: 20px; }
+@media (min-width: 700px) { .kg-list { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); } }
+@media (min-width: 1000px) { .kg-line { margin-left: 32px; margin-right: 32px; } }

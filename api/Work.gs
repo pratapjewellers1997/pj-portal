@@ -419,7 +419,7 @@ function buildSnapshot_(win) {
   var names = buildNameMap_(raw);
 
   // 3. Turn each source into tasks / attendance
-  var tasks = [], bases = {}, attendance = [], monthly = [], liveToday = 0, items = {}, joins = [];
+  var tasks = [], bases = {}, attendance = [], monthly = [], liveToday = 0, items = {}, joins = [], karigar = [];
   raw.forEach(function (r) {
     if (!r.book) return;
     var t0 = Date.now();
@@ -431,6 +431,13 @@ function buildSnapshot_(win) {
         joins = joins.concat(att.joins || []);
         liveToday += att.liveToday;
         r.health.rows = att.days.length;
+      } else if (r.src.type === 'Karigar') {
+        var kb = r.src.sysId + '|' + r.src.tab;
+        bases[kb] = r.book.url + '/edit#gid=' + (r.book.gids[r.src.tab] || 0) + '&range=A';
+        var kl = parseKarigar_(r.src, r.book, names);
+        kl.forEach(function (k) { k.b = kb; k.s = r.src.sysId; });
+        karigar = karigar.concat(kl);
+        r.health.rows = kl.length;
       } else {
         var list = r.src.type === 'FMS' ? parseFms_(r.src, r.book, names, cutoff, horizon)
                  : r.src.type === 'Checklist' ? parseChecklist_(r.src, r.book, names, cutoff, horizon)
@@ -451,8 +458,11 @@ function buildSnapshot_(win) {
     r.health.ms += Date.now() - t0;
   });
 
+  addKarigarFollowers_(karigar, tasks);
+
   return {
     tasks: tasks, bases: bases, attendance: attendance, monthly: monthly, items: items, joins: joins,
+    karigar: karigar,
     builtAt: new Date().toISOString(),
     health: {
       sources: raw.map(function (r) { return r.health; }),
@@ -563,6 +573,14 @@ function readBook_(src) {
   if (src.type === 'FMS') { want[src.tab] = q_(src.tab); want['Doer Emails'] = q_('Doer Emails') + '!A:C'; want['DB_Format'] = q_('DB_Format') + '!A:J'; }
   if (src.type === 'Checklist') want[src.tab] = q_(src.tab) + '!A:Z';
   if (src.type === 'Delegation') want[src.tab] = q_(src.tab) + '!A:Z';
+  if (src.type === 'Karigar') {
+    // Repair web app: issued items (A:L) and, from Repair_Received, only the
+    // Repair ID / date (A:B) and Status..Reversal (R:U). Amounts and the
+    // karigar ledger / payment tabs are never read.
+    want[src.tab] = q_(src.tab) + '!A:L';
+    want['Repair_Received|A'] = q_('Repair_Received') + '!A:B';
+    want['Repair_Received|R'] = q_('Repair_Received') + '!R:U';
+  }
   if (src.type === 'Attendance') {
     want[src.tab] = q_(src.tab) + '!A:X';
     want['RAW_DATA'] = q_('RAW_DATA') + '!A:G';
@@ -841,6 +859,80 @@ function parseDelegation_(src, book, names, cutoff, horizon) {
  * Today (and any day not yet processed) comes live from RAW_DATA check-ins.
  * MONTHLY_SUMMARY gives the official month totals.
  */
+/**
+ * Items with karigars (Step 10): Repair web app "Repair_Issued". An item is
+ * still with the karigar while its Status is not Completed and it has no
+ * (non-reversed) row in Repair_Received. Customer mobile numbers are not kept.
+ */
+function parseKarigar_(src, book, names) {
+  var v = book.tabs[src.tab] || [];
+  if (v.length < 2) return [];
+  var head = lowerRow_(v[0]);
+  var c = function (n) { return head.indexOf(n); };
+  var ci = { id: c('repair id'), at: c('date & time'), fn: c('customer first name'), ln: c('customer last name'),
+             prod: c('product name'), wt: c('issue weight'), desc: c('repair description'),
+             kar: c('kaarigar name'), st: c('status'), by: c('created by') };
+  if (ci.id < 0 || ci.kar < 0 || ci.st < 0) throw new Error(src.tab + ': Repair ID / Kaarigar Name / Status column not found');
+
+  var back = {}, ra = book.tabs['Repair_Received|A'] || [], rr = book.tabs['Repair_Received|R'] || [];
+  ra.forEach(function (row, i) {
+    if (i === 0 || !row[0]) return;
+    var rev = String((rr[i] || [])[3] || '');            // R Status, S Updated By, T Notes, U Reversal Status
+    if (/revers/i.test(rev) && !/\bnot\b/i.test(rev)) return;
+    back[String(row[0]).trim()] = true;
+  });
+
+  var out = [];
+  v.forEach(function (row, i) {
+    if (i === 0) return;
+    var id = String(row[ci.id] || '').trim();
+    if (!id) return;
+    var st = String(row[ci.st] || '').trim().toLowerCase();
+    if (st === 'completed' || st === 'cancelled' || st === 'canceled' || back[id]) return;
+    var cell = function (k) { return ci[k] > -1 ? cleanName_(row[ci[k]]) : ''; };
+    out.push({
+      id: id, at: toMs_(row[ci.at]) || null,
+      cust: cleanName_(cell('fn') + ' ' + cell('ln')), prod: cell('prod'), wt: cell('wt'),
+      desc: cell('desc').slice(0, 120), kar: cell('kar') || 'Not named',
+      by: resolveNames_(row[ci.by], names), u: i + 1
+    });
+  });
+  return out;
+}
+
+/** Adds the Repair FMS people who chase or bring back each item (follow-up / wapas steps). */
+function addKarigarFollowers_(karigar, tasks) {
+  if (!karigar.length) return;
+  var byKey = {};
+  karigar.forEach(function (k) { byKey[k.s + '|' + k.id] = k; });
+  tasks.forEach(function (t) {
+    var k = t.y === 'FMS' && byKey[t.s + '|' + t.k];
+    if (!k || !/follow|wapas|bring|lekar|receiv/i.test(t.t)) return;
+    t.w.forEach(function (e) { if (k.by.indexOf(e) === -1) k.by.push(e); });
+  });
+}
+
+/**
+ * karigar {session}: items still with karigars, oldest first.
+ * Doer: only items they created or have to follow up / bring back.
+ */
+function actionKarigar_(req) {
+  var user = findPerson_(readSession_(req.session));
+  var data = loadSnapshot_() || buildSnapshotLocked_(60000) || loadSnapshot_();
+  if (!data) throw apiError_('busy');
+  var isDoer = user.role === 'Doer';
+  var list = (data.karigar || []).filter(function (k) {
+    return !isDoer || k.by.some(function (e) { return user.emails.indexOf(e) > -1; });
+  }).map(function (k) {
+    return { id: k.id, at: k.at, customer: k.cust, product: k.prod, weight: k.wt, description: k.desc,
+             karigar: k.kar, who: k.by, url: (data.bases[k.b] || '') + k.u };
+  }).sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+  var names = {};
+  loadPeople_(false).forEach(function (p) { p.emails.forEach(function (e) { names[e] = p.name; }); });
+  return { ok: true, scope: isDoer ? 'self' : 'all', configured: Array.isArray(data.karigar),
+           items: list, names: names, builtAt: data.builtAt };
+}
+
 function parseAttendance_(src, book, names, cutoff) {
   var cutKey = Utilities.formatDate(new Date(cutoff), TZ, 'yyyy-MM-dd');
   var days = [], lastKey = '';

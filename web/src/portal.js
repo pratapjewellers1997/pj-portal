@@ -6,6 +6,7 @@ import { renderScores } from './scores.js';
 import { renderProfile } from './profile.js';
 import { renderInsights } from './insights.js';
 import { renderSearch } from './search.js';
+import { karigarLine } from './karigar.js';
 import { noticeBoard, kudosWall } from './social.js';
 import { loadWork, ymd } from './workdata.js';
 
@@ -123,6 +124,7 @@ function renderSystems(root, data, ctx) {
       installHint()),
     noticeBoard(ctx),
     todayCard(ctx),
+    karigarLine(ctx),
     kudosWall(ctx),
     user.role !== 'Doer' ? activityLine(systems) : null,
     h('div', { class: 'layout' }, chips, main),

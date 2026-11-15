@@ -1,5 +1,6 @@
 import { h, safeUrl } from './dom.js';
 import { callApi } from './api.js';
+import { karigarSection } from './karigar.js';
 import { loadWork, ymd, selectBox, fmtDateTime, loadingBox, ERRORS, markButton } from './workdata.js';
 
 // Board page:
@@ -39,7 +40,7 @@ export function renderBoard(root, ctx) {
       h('div', { class: 'lookup-bar' }, input,
         h('button', { type: 'button', class: 'btn-navy', onclick: runLookup }, 'Find')),
       err),
-    h('div', { class: 'page-body' }, results),
+    h('div', { class: 'page-body' }, results, karigarSection(ctx)),
     body);
   if (state.q) lookup(results, ctx, state.q);
 
