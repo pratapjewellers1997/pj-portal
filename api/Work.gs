@@ -61,6 +61,10 @@ function setupWorkTrigger() {
 
 /** Timer target. */
 function refreshWorkCache() {
+  // Chat staff list first (cheap: writes to Firestore only when People changed), also at night.
+  if (typeof syncStaffToFirestore_ === 'function') {
+    try { syncStaffToFirestore_(false); } catch (e) { console.warn('Chat staff sync failed: ' + e); }
+  }
   var hour = Number(Utilities.formatDate(new Date(), TZ, 'H'));
   if (hour >= QUIET_HOURS[0] && hour < QUIET_HOURS[1]) return;
   buildSnapshotLocked_(5000);

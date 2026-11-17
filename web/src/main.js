@@ -2,6 +2,7 @@ import './style.css';
 import { callApi } from './api.js';
 import { h } from './dom.js';
 import { renderPortal } from './portal.js';
+import { connectChatAfterLogin, disconnectChatOnSignOut } from './messages.js';
 
 // Flow: sign in with Google -> API checks -> portal session (7 days)
 // -> "portal" call returns this person's systems and links from the Feed.
@@ -35,6 +36,7 @@ const store = {
 function signOut() {
   store.set(SESSION_KEY, null);
   store.set(CACHE_KEY, null);
+  disconnectChatOnSignOut();
   if (window.google?.accounts?.id) google.accounts.id.disableAutoSelect();
   renderSignIn();
 }
@@ -70,6 +72,7 @@ async function onGoogleCredential(response) {
   try {
     const data = await callApi('login', { idToken: response.credential });
     store.set(SESSION_KEY, data.session);
+    connectChatAfterLogin(response.credential);   // same Google sign-in also opens chat (Firebase)
     await loadPortal(data.session, null);
   } catch (err) {
     renderSignIn(err.message);

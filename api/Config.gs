@@ -13,7 +13,7 @@
  * Rule: this API only READS the Registry. It never writes to System Master.
  */
 
-var API_VERSION = '0.14.2';
+var API_VERSION = '0.15.0';
 var SESSION_DAYS = 7;
 var PEOPLE_TAB = 'People';
 var PEOPLE_CACHE_SECONDS = 300; // 5 minutes
@@ -60,4 +60,8 @@ function clearPortalCache() {
   });
   cache.removeAll(keys);
   console.log('Cleared ' + keys.length + ' cached items. People changes apply immediately.');
+  if (typeof syncStaffToFirestore_ === 'function') {
+    try { var r = syncStaffToFirestore_(true); console.log('Chat staff list updated: ' + r.active + ' active, ' + r.deactivated + ' turned off.'); }
+    catch (e) { console.warn('Chat staff list not updated: ' + e); }
+  }
 }

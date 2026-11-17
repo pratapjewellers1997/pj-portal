@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// PJ Portal chat: security rules for Firebase Firestore.
+// Paste this whole file into Firebase console -> Firestore -> Rules -> Publish.
+//
+// - Only people in "staff" (copied from the Registry People tab by the
+//   Apps Script every 10 minutes) with active == true can use chat.
+// - A chat has exactly two members (their main email addresses). Only those
+//   two can read it or write to it. Nobody else, including other staff.
+// - Messages cannot be edited or deleted from the portal. Each message must
+//   be from the signed-in person, stamped with the server time, max 1000 chars.
+// - The "staff" list itself can only be written by the Apps Script (server).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function staffPath(e) { return /databases/$(database)/documents/staff/$(e); }
+    function isStaff(e) { return exists(staffPath(e)) && get(staffPath(e)).data.active == true; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function ok() { return signedIn() && isStaff(myEmail()); }
+    function me() { return get(staffPath(myEmail())).data.primary; }
+
+    match /staff/{email} {
+      allow read: if ok();
+      allow write: if false;
+    }
+
+    match /chats/{chatId} {
+      allow read: if ok() && me() in resource.data.members;
+
+      allow create: if ok()
+        && request.resource.data.members is list
+        && request.resource.data.members.size() == 2
+        && request.resource.data.members[0] < request.resource.data.members[1]
+        && chatId == request.resource.data.members[0] + '__' + request.resource.data.members[1]
+        && me() in request.resource.data.members
+        && isStaff(request.resource.data.members[0])
+        && isStaff(request.resource.data.members[1])
+        && request.resource.data.keys().hasOnly(['members', 'names', 'last', 'read']);
+
+      allow update: if ok()
+        && me() in resource.data.members
+        && request.resource.data.members == resource.data.members
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['names', 'last', 'read']);
+
+      allow delete: if false;
+
+      match /messages/{msgId} {
+        allow read: if ok()
+          && me() in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+
+        allow create: if ok()
+          && me() in getAfter(/databases/$(database)/documents/chats/$(chatId)).data.members
+          && request.resource.data.from == me()
+          && request.resource.data.at == request.time
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.keys().hasOnly(['from', 'text', 'at', 'file']);
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}

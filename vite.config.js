@@ -7,5 +7,5 @@ export default defineConfig({
   root: 'web',
   base: './',
   envDir: '..',
-  build: { outDir: '../dist', emptyOutDir: true },
+  build: { outDir: '../dist', emptyOutDir: true, chunkSizeWarningLimit: 900 },  // firebase chunk loads only for chat
 });

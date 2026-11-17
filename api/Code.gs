@@ -20,7 +20,8 @@
  *   karigar {session} -> {ok, items}  (Step 10: items still with karigars)
  *   vendors {session, period} -> {ok, vendors, orders, sources}  (Step 11, Vendors.gs)
  *   checklists / tickChecklist  (Step 12, Checklists.gs: leaving + new joiner checklists)
- *   inbox / thread / markRead / sendMessage / unread  (Step 13, Messages.gs)
+ *   chatUpload / chatFile / notifyChat / pushRegister / pushUnregister  (Step 13, Chat.gs;
+ *   chat text itself lives in Firebase Firestore)
  *   social / postNotice / readNotice / removeNotice / giveKudos / removeKudos     (Step 8, Social.gs)
  */
 
@@ -42,11 +43,11 @@ function doPost(e) {
       case 'vendors':  return json_(actionVendors_(req));
       case 'checklists':    return json_(actionChecklists_(req));
       case 'tickChecklist': return json_(actionTickChecklist_(req));
-      case 'inbox':       return json_(actionInbox_(req));
-      case 'thread':      return json_(actionThread_(req));
-      case 'markRead':    return json_(actionMarkRead_(req));
-      case 'sendMessage': return json_(actionSendMessage_(req));
-      case 'unread':      return json_(actionUnread_(req));
+      case 'chatUpload':     return json_(actionChatUpload_(req));
+      case 'chatFile':       return json_(actionChatFile_(req));
+      case 'notifyChat':     return json_(actionNotifyChat_(req));
+      case 'pushRegister':   return json_(actionPushRegister_(req));
+      case 'pushUnregister': return json_(actionPushUnregister_(req));
       case 'social':       return json_(actionSocial_(req));
       case 'postNotice':   return json_(actionPostNotice_(req));
       case 'readNotice':   return json_(actionReadNotice_(req));

@@ -3,7 +3,7 @@
 // files. Data from the API (script.google.com) and Google sign-in are never
 // cached here; the page keeps its own last-known data.
 
-const CACHE = 'pj-shell-v1';
+const CACHE = 'pj-shell-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './manifest.webmanifest', './icons/icon-192.png'])));
@@ -39,4 +39,33 @@ self.addEventListener('fetch', (event) => {
       return res;
     })),
   );
+});
+
+// ---- Phone notifications (Firebase Cloud Messaging, data messages from the PJ Portal API).
+// The text is generic on purpose ("💬 Babu · New message"), never the message itself.
+self.addEventListener('push', (event) => {
+  let p = {};
+  try { const j = event.data ? event.data.json() : {}; p = j.data || j; } catch {}
+  const title = p.title || 'PJ Portal';
+  const url = new URL(`./${p.url || ''}`, self.registration.scope).href;
+  event.waitUntil((async () => {
+    // Skip if the portal is open and on screen: the page already shows it live.
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (wins.some((w) => w.focused && w.visibilityState === 'visible')) return;
+    await self.registration.showNotification(title, {
+      body: p.body || '', tag: p.tag || undefined, renotify: Boolean(p.tag),
+      icon: './icons/icon-192.png', badge: './icons/icon-192.png', data: { url },
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || self.registration.scope;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const open = wins.find((w) => w.url.startsWith(self.registration.scope));
+    if (open) { await open.focus(); open.navigate ? open.navigate(url) : null; return; }
+    await self.clients.openWindow(url);
+  })());
 });

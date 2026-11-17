@@ -93,7 +93,7 @@ function actionPostNotice_(req) {
   if (!title || !message) throw apiError_('missing_fields');
   var audience = AUDIENCES.indexOf(req.audience) > -1 ? req.audience : 'All';
   var expires = /^\d{4}-\d{2}-\d{2}$/.test(req.expires || '') ? req.expires : '';
-  return withLock_(function () {
+  var result = withLock_(function () {
     var data = loadSocial_(true);
     if (countToday_(data.notices, user.email) >= NOTICE_LIMITS.perDay) throw apiError_('daily_limit');
     var id = 'N-' + Utilities.getUuid().slice(0, 8);
@@ -102,6 +102,9 @@ function actionPostNotice_(req) {
     clearSocialCache_();
     return { ok: true, id: id };
   });
+  // Phone notification (after the lock, so nobody waits for it)
+  if (typeof notifyPush_ === 'function') notifyPush_(audienceEmails_(audience, user.email), '📢 ' + title, 'New notice from ' + user.name, '#systems', 'notice');
+  return result;
 }
 
 /** readNotice {session, id}: "Got it" */
@@ -140,7 +143,7 @@ function actionGiveKudos_(req) {
     return p.active && p.emails.indexOf(to) > -1 && PORTAL_ROLES.indexOf(p.role) > -1;
   })[0];
   if (!target) throw apiError_('not_registered_person');
-  return withLock_(function () {
+  var result = withLock_(function () {
     var data = loadSocial_(true);
     if (countToday_(data.kudos, user.email) >= KUDOS_LIMITS.perDay) throw apiError_('daily_limit');
     var id = 'K-' + Utilities.getUuid().slice(0, 8);
@@ -149,6 +152,8 @@ function actionGiveKudos_(req) {
     clearSocialCache_();
     return { ok: true, id: id };
   });
+  if (typeof notifyPush_ === 'function') notifyPush_(target.emails, '👏 ' + user.name + ' appreciated you', 'Tap to see it on your profile.', '#person/' + encodeURIComponent(target.emails[0]), 'kudos');
+  return result;
 }
 
 /** removeKudos {session, id}: giver or Admin. */
