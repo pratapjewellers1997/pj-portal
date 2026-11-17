@@ -387,16 +387,31 @@ function parseRange_(from, to) {
 
 /* ================= Snapshot: build, store, load ================= */
 
+/**
+ * Long data builds (snapshot, history) use their own "building" flag instead of
+ * the script lock, so the script lock stays free for quick writes: messages,
+ * checklist ticks, notices, kudos. If another build is running we wait for it
+ * and return null, and the caller reads what that build saved.
+ * The flag expires by itself after 5 minutes if a build ever crashes.
+ */
+function withBuildFlag_(name, waitMs, fn) {
+  var cache = CacheService.getScriptCache(), key = 'building_' + name, end = Date.now() + waitMs, waited = false;
+  while (cache.get(key)) {
+    if (Date.now() >= end) return null;
+    waited = true;
+    Utilities.sleep(2000);
+  }
+  if (waited) return null;
+  cache.put(key, String(Date.now()), 300);
+  try { return fn(); } finally { cache.remove(key); }
+}
+
 function buildSnapshotLocked_(waitMs) {
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(waitMs)) return null;
-  try {
+  return withBuildFlag_('snapshot', waitMs, function () {
     var data = buildSnapshot_();
     saveSnapshot_(data);
     return data;
-  } finally {
-    lock.releaseLock();
-  }
+  });
 }
 
 function buildSnapshot_(win) {
@@ -488,18 +503,17 @@ function loadHistory_(range) {
   var packed = joinParts_(function (keys) { return cache.getAll(keys); }, cache.get(key + '_n'), key + '_');
   if (packed) { try { return unpack_(packed); } catch (e) {} }
 
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(90000)) return null;
-  try {
+  var built = withBuildFlag_(key, 90000, function () {
     var data = buildSnapshot_({ from: range.from, to: range.to });
     var p = pack_(data), parts = {}, n = 0;
     for (var i = 0; i < p.length; i += CACHE_CHUNK) parts[key + '_' + (n++)] = p.substr(i, CACHE_CHUNK);
     parts[key + '_n'] = String(n);
     try { cache.putAll(parts, 21600); } catch (e) { console.warn('History cache write failed: ' + e); }
     return data;
-  } finally {
-    lock.releaseLock();
-  }
+  });
+  if (built) return built;
+  var again = joinParts_(function (keys) { return cache.getAll(keys); }, cache.get(key + '_n'), key + '_');   // another request built it
+  return again ? unpack_(again) : null;
 }
 
 function saveSnapshot_(data) {

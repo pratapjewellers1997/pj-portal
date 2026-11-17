@@ -237,8 +237,7 @@ function loadVendorHistory_(sysIds) {
   if (packed) { try { return unpack_(packed); } catch (e) {} }
   if (!sysIds.length) return [];
 
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) return null;
+  var built = withBuildFlag_(VENDOR_HIST_KEY, 60000, function () {
   try {
     var raw = loadSourcesCfg_().filter(function (s) { return s.type === 'FMS' && sysIds.indexOf(s.sysId) > -1; })
       .map(function (src) { return { src: src, book: readBook_(src) }; });
@@ -261,9 +260,11 @@ function loadVendorHistory_(sysIds) {
   } catch (err) {
     console.warn('Vendor history failed: ' + err);
     return null;
-  } finally {
-    lock.releaseLock();
   }
+  });
+  if (built) return built;
+  var again = joinParts_(function (keys) { return cache.getAll(keys); }, cache.get(VENDOR_HIST_KEY + '_n'), VENDOR_HIST_KEY + '_');
+  return again ? unpack_(again) : null;
 }
 
 /** Period -> {from, to} in ms (IST). */
