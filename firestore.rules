@@ -28,6 +28,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Chat settings (the Audit notice). Written only by the Apps Script.
+    match /settings/{id} {
+      allow read: if ok();
+      allow write: if false;
+    }
+
     match /chats/{chatId} {
       allow read: if ok() && me() in resource.data.members;
 

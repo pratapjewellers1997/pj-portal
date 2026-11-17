@@ -10,6 +10,7 @@ import { karigarLine } from './karigar.js';
 import { renderVendors } from './vendors.js';
 import { renderChecklists, checklistLine } from './checklists.js';
 import { renderMessages, messagesButton } from './messages.js';
+import { renderChatAdmin } from './chatadmin.js';
 import { noticeBoard, kudosWall } from './social.js';
 import { loadWork, ymd } from './workdata.js';
 
@@ -70,6 +71,12 @@ export function renderPortal(root, data, { onSignOut, session }) {
       tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
         p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
       renderVendors(view, ctx);
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (id === 'chatadmin' && user.role !== 'Doer') {
+      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' }, p.label)));
+      renderChatAdmin(view, ctx);
       window.scrollTo(0, 0);
       return;
     }

@@ -22,6 +22,7 @@
  *   checklists / tickChecklist  (Step 12, Checklists.gs: leaving + new joiner checklists)
  *   chatUpload / chatFile / notifyChat / pushRegister / pushUnregister  (Step 13, Chat.gs;
  *   chat text itself lives in Firebase Firestore)
+ *   chatAdmin / chatPurge / chatAuditSet / auditChats / auditThread / archiveNow  (ChatAdmin.gs)
  *   social / postNotice / readNotice / removeNotice / giveKudos / removeKudos     (Step 8, Social.gs)
  */
 
@@ -48,6 +49,12 @@ function doPost(e) {
       case 'notifyChat':     return json_(actionNotifyChat_(req));
       case 'pushRegister':   return json_(actionPushRegister_(req));
       case 'pushUnregister': return json_(actionPushUnregister_(req));
+      case 'chatAdmin':      return json_(actionChatAdmin_(req));
+      case 'chatPurge':      return json_(actionChatPurge_(req));
+      case 'chatAuditSet':   return json_(actionChatAuditSet_(req));
+      case 'auditChats':     return json_(actionAuditChats_(req));
+      case 'auditThread':    return json_(actionAuditThread_(req));
+      case 'archiveNow':     return json_(actionArchiveNow_(req));
       case 'social':       return json_(actionSocial_(req));
       case 'postNotice':   return json_(actionPostNotice_(req));
       case 'readNotice':   return json_(actionReadNotice_(req));

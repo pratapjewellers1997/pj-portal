@@ -80,11 +80,20 @@ export function messagesButton(ctx) {
 export function renderMessages(root, ctx, withEmail) {
   pageOffs.forEach((f) => f()); pageOffs = [];
   const body = h('div', { class: 'page-body' }, loadingBox('Opening chat…'));
-  const head = h('section', { class: 'page-head' }, h('h1', {}, '💬 Messages'),
-    h('p', {}, 'Chat with anyone in the team. Only the two of you can read it.'));
+  const notice = h('p', { class: 'msg-audit', hidden: true });
+  const records = ctx.user.role !== 'Doer' ? h('a', { href: '#chatadmin', class: 'vs-link' }, '⚙️ Chat records') : null;
+  const intro = h('p', {}, 'Chat with anyone in the team. Only the two of you can read it.');
+  const head = h('section', { class: 'page-head' }, h('h1', {}, '💬 Messages'), intro, records, notice);
   root.replaceChildren(head, body);
   ensureChat(ctx).then((state) => {
     if (!document.body.contains(body)) return;
+    if (state === 'ready') {
+      pageOffs.push(fbMod.watchSettings((s) => {
+        notice.hidden = !s.auditOn;
+        intro.textContent = s.auditOn ? 'Chat with anyone in the team.' : 'Chat with anyone in the team. Only the two of you can read it.';
+        notice.textContent = s.auditOn ? `👁 Chat audit is ON since ${new Date(s.since).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}: Admin, Owners and Managers can read messages sent after that time.` : '';
+      }));
+    }
     if (state === 'signin') return signInCard(body, ctx, () => renderMessages(root, ctx, withEmail));
     if (state === 'not_ready') return body.replaceChildren(h('div', { class: 'notice' }, h('p', {}, ERR['permission-denied'])));
     if (withEmail) renderThread(root, ctx, withEmail.toLowerCase());

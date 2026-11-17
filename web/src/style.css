@@ -626,3 +626,22 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 .msg-video { display: block; max-width: 100%; max-height: 360px; border-radius: 10px; background: #000; }
 .msg-file-btn { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 14px; color: var(--navy); cursor: pointer; text-align: left; }
 .msg-count { font-size: 11px; }
+
+/* ---------- Chat records page ---------- */
+.ca-box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 14px; }
+.ca-box > p { margin: 6px 0; font-size: 14.5px; }
+.ca-table-wrap { overflow-x: auto; }
+.ca-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ca-table th { text-align: left; color: var(--gold-dark); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.ca-table td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ca-table a { color: var(--navy); font-weight: 600; }
+.ca-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.ca-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin: 8px 0; }
+.ca-grid input[type=date] { width: 100%; box-sizing: border-box; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; font: inherit; }
+.ca-check { display: flex; gap: 8px; align-items: center; font-size: 14px; margin: 6px 0; }
+.ca-out { margin-top: 10px; }
+.ca-out input[type=text] { min-height: 40px; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; font: inherit; }
+.ca-danger { min-height: 38px; padding: 0 16px; border-radius: 999px; border: 0; background: var(--red); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.ca-danger:disabled { opacity: .5; cursor: default; }
+.msg-audit { background: rgba(201,162,75,.18); border: 1px solid rgba(201,162,75,.5); color: #fff; border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+.msg-audit[hidden] { display: none; }

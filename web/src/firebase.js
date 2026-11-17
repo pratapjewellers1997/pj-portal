@@ -103,6 +103,14 @@ export function watchMessages(chatId, cb, onError) {
   }, onError);
 }
 
+/** Chat settings written by the API (Audit notice). cb({auditOn, since}) */
+export function watchSettings(cb) {
+  return onSnapshot(doc(db, 'settings', 'chat'), (d) => {
+    const s = d.exists() ? d.data() : {};
+    cb({ auditOn: Boolean(s.auditOn), since: ms(s.since), roles: s.roles || [] });
+  }, () => cb({ auditOn: false }));
+}
+
 export function watchChat(chatId, cb, onError) {
   return onSnapshot(doc(db, 'chats', chatId), (d) => cb(d.exists() ? d.data() : null), onError);
 }

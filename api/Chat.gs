@@ -40,6 +40,7 @@ function setupChat() {
   console.log('Chat staff list: ' + r.active + ' active emails written, ' + r.deactivated + ' turned off.');
   var folder = chatFolderId_();
   console.log('Chat files folder in mis@ Drive: ' + folder);
+  if (typeof setupChatArchive === 'function') setupChatArchive();
 }
 
 function syncStaffToFirestore_(force) {
@@ -108,6 +109,22 @@ function chatFolderId_() {
   return f.id;
 }
 
+/** One sub-folder per chat, e.g. "Harshada Lad – Rohan Todkar" (created the first time). */
+function chatSubFolderId_(members) {
+  var props = PropertiesService.getScriptProperties();
+  var key = 'chatdir_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, members.join('|'))).slice(0, 16);
+  var id = props.getProperty(key);
+  if (id) return id;
+  var people = messageable2_(), all = loadPeople_(false), nameOf = function (e) {
+    var p = all.filter(function (x) { return x.emails.indexOf(e) > -1; })[0];
+    return (p && p.name) || (people[e] && people[e].name) || e;
+  };
+  var f = Drive.Files.create({ name: nameOf(members[0]) + ' – ' + nameOf(members[1]), parents: [chatFolderId_()],
+    mimeType: 'application/vnd.google-apps.folder', appProperties: { pj: 'chatdir', m0: members[0].slice(0, 120), m1: members[1].slice(0, 120) } });
+  props.setProperty(key, f.id);
+  return f.id;
+}
+
 function chatPair_(user, toEmail) {
   var other = messageable2_()[normaliseEmail_(toEmail)];
   if (!other || other.primary === user.emails[0]) throw apiError_('bad_request');
@@ -129,9 +146,9 @@ function actionChatUpload_(req) {
   var stamp = Utilities.formatDate(new Date(), TZ, 'yyyyMMdd-HHmmss');
   var blob = Utilities.newBlob(bytes, mime, stamp + ' ' + name);
   var file = Drive.Files.create({
-    name: stamp + ' ' + name, parents: [chatFolderId_()], mimeType: mime,
+    name: stamp + ' ' + name, parents: [chatSubFolderId_(members)], mimeType: mime,
     description: JSON.stringify({ members: members, from: user.emails[0] }),
-    appProperties: { m0: members[0].slice(0, 120), m1: members[1].slice(0, 120) }
+    appProperties: { pj: 'chat', m0: members[0].slice(0, 120), m1: members[1].slice(0, 120) }
   }, blob, { fields: 'id,name,mimeType,size' });
   return { ok: true, file: { id: file.id, name: name, mime: mime, size: bytes.length, kind: kind } };
 }
@@ -141,11 +158,14 @@ function actionChatFile_(req) {
   var id = String(req.id || '');
   if (!/^[\w-]{10,100}$/.test(id)) throw apiError_('bad_request');
   var meta;
-  try { meta = Drive.Files.get(id, { fields: 'id,name,mimeType,size,appProperties,parents,trashed' }); }
+  try { meta = Drive.Files.get(id, { fields: 'id,name,mimeType,size,appProperties,parents,trashed,createdTime' }); }
   catch (e) { throw apiError_('not_found'); }
   var ap = meta.appProperties || {};
-  if (meta.trashed || (meta.parents || []).indexOf(chatFolderId_()) === -1) throw apiError_('not_found');
-  if (user.emails.indexOf(ap.m0) === -1 && user.emails.indexOf(ap.m1) === -1) throw apiError_('forbidden');
+  var isChatFile = ap.pj === 'chat' || (meta.parents || []).indexOf(chatFolderId_()) > -1;
+  if (meta.trashed || !isChatFile || !ap.m0) throw apiError_('not_found');
+  var member = user.emails.indexOf(ap.m0) > -1 || user.emails.indexOf(ap.m1) > -1;
+  var audit = typeof chatAuditAllows_ === 'function' && chatAuditAllows_(user, Date.parse(meta.createdTime));
+  if (!member && !audit) throw apiError_('forbidden');
   var res = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '?alt=media', {
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw apiError_('not_found');
