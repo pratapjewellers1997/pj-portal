@@ -9,6 +9,7 @@ import { renderSearch } from './search.js';
 import { karigarLine } from './karigar.js';
 import { renderVendors } from './vendors.js';
 import { renderChecklists, checklistLine } from './checklists.js';
+import { renderMessages, messagesButton } from './messages.js';
 import { noticeBoard, kudosWall } from './social.js';
 import { loadWork, ymd } from './workdata.js';
 
@@ -50,6 +51,7 @@ export function renderPortal(root, data, { onSignOut, session }) {
         h('div', {}, h('div', { class: 'top-name' }, 'Pratap Jewellers'), h('div', { class: 'top-sub' }, 'Staff portal'))),
       h('div', { class: 'top-user' },
         h('a', { href: '#search', class: 'top-search', 'aria-label': 'Search everything', title: 'Search' }, '🔍'),
+        messagesButton(ctx),
         h('span', { class: `role role-${user.role.toLowerCase()}` }, user.role),
         h('button', { class: 'link-btn', type: 'button', onclick: onSignOut }, 'Sign out'))),
     tabs,
@@ -68,6 +70,13 @@ export function renderPortal(root, data, { onSignOut, session }) {
       tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
         p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
       renderVendors(view, ctx);
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (id === 'messages') {
+      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
+        p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
+      renderMessages(view, ctx, decodeURIComponent(location.hash.split('/').slice(1).join('/') || ''));
       window.scrollTo(0, 0);
       return;
     }

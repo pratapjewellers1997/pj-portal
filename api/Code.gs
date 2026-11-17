@@ -20,6 +20,7 @@
  *   karigar {session} -> {ok, items}  (Step 10: items still with karigars)
  *   vendors {session, period} -> {ok, vendors, orders, sources}  (Step 11, Vendors.gs)
  *   checklists / tickChecklist  (Step 12, Checklists.gs: leaving + new joiner checklists)
+ *   inbox / thread / sendMessage / unread  (Step 13, Messages.gs)
  *   social / postNotice / readNotice / removeNotice / giveKudos / removeKudos     (Step 8, Social.gs)
  */
 
@@ -41,6 +42,10 @@ function doPost(e) {
       case 'vendors':  return json_(actionVendors_(req));
       case 'checklists':    return json_(actionChecklists_(req));
       case 'tickChecklist': return json_(actionTickChecklist_(req));
+      case 'inbox':       return json_(actionInbox_(req));
+      case 'thread':      return json_(actionThread_(req));
+      case 'sendMessage': return json_(actionSendMessage_(req));
+      case 'unread':      return json_(actionUnread_(req));
       case 'social':       return json_(actionSocial_(req));
       case 'postNotice':   return json_(actionPostNotice_(req));
       case 'readNotice':   return json_(actionReadNotice_(req));
