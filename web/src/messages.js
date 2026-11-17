@@ -200,13 +200,20 @@ function renderThread(root, ctx, other) {
     lastMarked = last.at;
     fb.markChatRead(id, chat.me).catch(() => {});
   };
+  let retries = 0;
   const attachMessages = () => {
     if (msgOff) return;
-    msgOff = fb.watchMessages(id, (l) => { messages = l; draw(); markRead(); }, (e) => { status.textContent = errText(e); });
-    pageOffs.push(() => msgOff && msgOff());
+    msgOff = fb.watchMessages(id, (l) => { messages = l; retries = 0; status.textContent = ''; draw(); markRead(); }, (e) => {
+      // A refused listener stops; start it again a few times (e.g. chat just created, phone was offline).
+      msgOff = null;
+      if (retries++ < 5 && document.body.contains(list)) setTimeout(attachMessages, 1500 * retries);
+      else status.textContent = errText(e);
+    });
   };
+  pageOffs.push(() => { if (msgOff) msgOff(); msgOff = null; retries = 99; });
   const onChats = (all) => {
     const c = all.find((x) => x.id === id);
+    if (c && !c.saved && !msgOff) { otherReadAt = c.otherReadAt; return; }   // wait until Google has the chat
     if (c) {
       if (!otherDesig && c.otherName) otherName = c.otherName;
       otherReadAt = c.otherReadAt;
@@ -224,7 +231,7 @@ function renderThread(root, ctx, other) {
     // Firestore shows the message at once ("Sending…") and confirms it when saved.
     // A brand-new chat is listened to only after it exists (security rules check the chat).
     await fb.sendChatMessage({ me: chat.me, myName: chat.myName, other, otherName, text, file });
-    attachMessages();
+    attachMessages();   // safe now: the chat exists on Google's side
     callApi('notifyChat', { session: ctx.session, to: other }).catch(() => {});
   };
   const doSend = () => {

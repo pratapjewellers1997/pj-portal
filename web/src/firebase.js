@@ -69,7 +69,7 @@ const ms = (t) => (t && typeof t.toMillis === 'function' ? t.toMillis() : t || 0
 /** My chats, live. Each: {id, other, otherName, last:{text,at,from,kind}, unread, seenByOther}. */
 export function watchChats(me, cb, onError) {
   const q = query(collection(db, 'chats'), where('members', 'array-contains', me));
-  return onSnapshot(q, (snap) => {
+  return onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
     const list = [];
     snap.forEach((d) => {
       const c = d.data();
@@ -82,6 +82,7 @@ export function watchChats(me, cb, onError) {
         last: c.last ? { text: c.last.text || '', at: lastAt, from: c.last.from, kind: c.last.kind || '' } : null,
         unread: Boolean(c.last && c.last.from !== me && lastAt > ms(read[keyOf(me)])),
         otherReadAt: ms(read[keyOf(other)]),
+        saved: !d.metadata.hasPendingWrites,   // false = only on this phone so far
       });
     });
     list.sort((a, b) => (b.last?.at || 0) - (a.last?.at || 0));
