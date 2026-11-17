@@ -8,6 +8,7 @@ import { renderInsights } from './insights.js';
 import { renderSearch } from './search.js';
 import { karigarLine } from './karigar.js';
 import { renderVendors } from './vendors.js';
+import { renderChecklists, checklistLine } from './checklists.js';
 import { noticeBoard, kudosWall } from './social.js';
 import { loadWork, ymd } from './workdata.js';
 
@@ -57,6 +58,12 @@ export function renderPortal(root, data, { onSignOut, session }) {
 
   function route() {
     const [id, param] = (location.hash || '#systems').slice(1).split('/');
+    if (id === 'checklists' && user.role !== 'Doer') {
+      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' }, p.label)));
+      renderChecklists(view, ctx);
+      window.scrollTo(0, 0);
+      return;
+    }
     if (id === 'vendors') {
       tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
         p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
@@ -133,6 +140,7 @@ function renderSystems(root, data, ctx) {
     noticeBoard(ctx),
     todayCard(ctx),
     karigarLine(ctx),
+    user.role !== 'Doer' ? checklistLine(ctx) : null,
     kudosWall(ctx),
     user.role !== 'Doer' ? activityLine(systems) : null,
     h('div', { class: 'layout' }, chips, main),

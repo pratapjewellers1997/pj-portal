@@ -19,6 +19,7 @@
  *   insights {session, from, to} -> {ok, funnels, turnaround, celebrations}  (Step 7)
  *   karigar {session} -> {ok, items}  (Step 10: items still with karigars)
  *   vendors {session, period} -> {ok, vendors, orders, sources}  (Step 11, Vendors.gs)
+ *   checklists / tickChecklist  (Step 12, Checklists.gs: leaving + new joiner checklists)
  *   social / postNotice / readNotice / removeNotice / giveKudos / removeKudos     (Step 8, Social.gs)
  */
 
@@ -38,6 +39,8 @@ function doPost(e) {
       case 'insights': return json_(actionInsights_(req));
       case 'karigar':  return json_(actionKarigar_(req));
       case 'vendors':  return json_(actionVendors_(req));
+      case 'checklists':    return json_(actionChecklists_(req));
+      case 'tickChecklist': return json_(actionTickChecklist_(req));
       case 'social':       return json_(actionSocial_(req));
       case 'postNotice':   return json_(actionPostNotice_(req));
       case 'readNotice':   return json_(actionReadNotice_(req));

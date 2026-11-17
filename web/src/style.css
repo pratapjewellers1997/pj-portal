@@ -551,3 +551,36 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 @media (min-width: 900px) { .vs-grid { grid-template-columns: repeat(2, 1fr); align-items: start; } .vs-tiles { grid-template-columns: repeat(6, 1fr); } }
 @media (min-width: 900px) { .vs-grid .vs-tiles { grid-template-columns: repeat(3, 1fr); } }
 .gs-more, .vs-close { color: var(--navy); opacity: 1; font-weight: 600; text-decoration: underline; }
+
+/* ---------- Step 12: Staff checklists ---------- */
+.cl-section { margin-bottom: 18px; }
+.cl-section .section-title { display: flex; align-items: center; gap: 8px; }
+.cl-section .count { font-size: 12px; font-weight: 600; background: var(--gold-soft); color: var(--gold-dark); border-radius: 999px; padding: 1px 8px; }
+.cl-list { display: grid; gap: 10px; }
+.cl-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; }
+.cl-card > summary { list-style: none; cursor: pointer; display: grid; gap: 6px; }
+.cl-card > summary::-webkit-details-marker { display: none; }
+.cl-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.cl-head b { color: var(--navy); font-size: 16px; }
+.cl-bar { height: 6px; background: var(--cream); border-radius: 999px; overflow: hidden; }
+.cl-bar span { display: block; height: 100%; background: var(--gold); border-radius: 999px; }
+.cl-sub { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--gold-dark); margin: 14px 0 6px; }
+.cl-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cl-row { display: flex; gap: 10px; align-items: flex-start; }
+.cl-row.ok .cl-text > span:first-child { color: var(--muted); }
+.cl-mark { width: 28px; text-align: center; flex: none; font-size: 17px; }
+.cl-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; font-size: 14.5px; }
+.cl-check { flex: none; width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--gold); background: #fff; color: #fff; font-weight: 800; cursor: pointer; display: grid; place-items: center; }
+.cl-check.on { background: var(--green); border-color: var(--green); }
+.cl-check:focus-visible { outline: 3px solid var(--gold-soft); }
+.cl-sublist { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; }
+.cl-sublist ul { margin: 2px 0 0; padding-left: 16px; display: grid; gap: 2px; }
+.cl-sublist a { color: var(--navy); }
+.cl-sublist .warn { color: var(--red); font-weight: 600; }
+.cl-done > summary { cursor: pointer; color: var(--muted); font-weight: 600; margin: 8px 0; }
+.cl-stop { margin-top: 12px; }
+.cl-start { background: #fff; border: 1px dashed var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+.cl-start-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.cl-start-row .select { flex: 2 1 220px; }
+.cl-start-row .btn-ghost-dark { width: auto; flex: 1 1 140px; margin-top: 0; }
+@media (min-width: 900px) { .cl-list { grid-template-columns: repeat(2, 1fr); align-items: start; } }
