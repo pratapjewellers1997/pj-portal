@@ -45,3 +45,19 @@ function checkSetup() {
   var people = loadPeople_(true);
   Logger.log('People rows read: ' + people.length);
 }
+
+/**
+ * Run this from the editor after changing the People tab (Active, Role, Name)
+ * when you don't want to wait 5 minutes. Clears the portal's short-term copies
+ * of People, each person's systems list, notices, checklists and messages.
+ * Work data (the 10-minute snapshot) is not touched.
+ */
+function clearPortalCache() {
+  var cache = CacheService.getScriptCache();
+  var keys = ['people_v1', 'social_v1', 'cl_v1', 'msg_v1_n'];
+  loadPeople_(true).forEach(function (p) {
+    p.emails.forEach(function (e) { keys.push('portal_v1_' + e); });
+  });
+  cache.removeAll(keys);
+  console.log('Cleared ' + keys.length + ' cached items. People changes apply immediately.');
+}
