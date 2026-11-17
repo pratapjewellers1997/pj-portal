@@ -2,7 +2,8 @@
  * PJ Portal API: Messages (Step 13). One-to-one messages between staff.
  *
  *   inbox   {session}           -> {ok, unread, conversations, contacts}
- *   thread  {session, with}     -> {ok, with, messages}   (also marks them read)
+ *   thread  {session, with}     -> {ok, with, messages}
+ *   markRead {session, with}    -> {ok, marked}           (sent by the page in the background)
  *   sendMessage {session, to, text} -> {ok, message}
  *   unread  {session}           -> {ok, unread}           (small, for the header badge)
  *
@@ -15,13 +16,17 @@
 var MSG_TAB = 'Portal Messages';
 var MSG_HEADERS = ['ID', 'Sent at', 'From', 'From name', 'To', 'To name', 'Text', 'Read at'];
 var MSG_CACHE = 'msg_v1';
+var MSG_CACHE_SECONDS = 21600;   // kept up to date on every send / read, so it can live 6 hours
 var MSG_MAX_LEN = 1000;
 var MSG_DAILY = 150;
 var MSG_THREAD_MAX = 200;
 
 function msgHeaders_() { HEADERS[MSG_TAB] = MSG_HEADERS; }
 
-/** All messages, oldest first. Cached for 60 seconds (cleared on every send / read). */
+/**
+ * All messages, oldest first. The cached copy is updated in place on every send
+ * and read (write-through), so the sheet is read only when the cache is empty.
+ */
 function loadMessages_() {
   var cache = CacheService.getScriptCache();
   var packed = joinParts_(function (keys) { return cache.getAll(keys); }, cache.get(MSG_CACHE + '_n'), MSG_CACHE + '_');
@@ -37,13 +42,19 @@ function loadMessages_() {
                   text: String(r[6] || '').replace(/^'(?=[=+\-@])/, ''), readAt: readAt || null, row: i + 2 });
     });
   }
+  saveMessageCache_(list);
+  return list;
+}
+
+function saveMessageCache_(list) {
   try {
     var p = pack_(list), parts = {}, n = 0;
     for (var j = 0; j < p.length; j += CACHE_CHUNK) parts[MSG_CACHE + '_' + (n++)] = p.substr(j, CACHE_CHUNK);
     parts[MSG_CACHE + '_n'] = String(n);
-    cache.putAll(parts, 60);
-  } catch (e) { /* fine: read the sheet again next time */ }
-  return list;
+    CacheService.getScriptCache().putAll(parts, MSG_CACHE_SECONDS);
+  } catch (e) {
+    CacheService.getScriptCache().remove(MSG_CACHE + '_n');   // too big / failed: read the sheet next time
+  }
 }
 
 function clearMessageCache_() { CacheService.getScriptCache().remove(MSG_CACHE + '_n'); }
@@ -106,18 +117,6 @@ function actionThread_(req) {
            (otherEmails.indexOf(m.from) > -1 && mine.indexOf(m.to) > -1);
   });
   if (!other && !msgs.length) throw apiError_('bad_request');
-
-  // Mark their messages to me as read (one sheet call)
-  var toMark = msgs.filter(function (m) { return mine.indexOf(m.to) > -1 && otherEmails.indexOf(m.from) > -1 && !m.readAt; });
-  if (toMark.length) {
-    var now = new Date();
-    withLock_(function () {
-      var sh = SpreadsheetApp.openById(cfg_('REGISTRY_ID')).getSheetByName(MSG_TAB);
-      sh.getRangeList(toMark.map(function (m) { return 'H' + m.row; })).setValue(now);
-    });
-    toMark.forEach(function (m) { m.readAt = now.getTime(); });
-    clearMessageCache_();
-  }
   return {
     ok: true,
     'with': { email: other ? other.email : withEmail, name: other ? other.name : withEmail,
@@ -128,6 +127,26 @@ function actionThread_(req) {
   };
 }
 
+/** Marks their messages to me as read: one sheet write, cache updated in place. */
+function actionMarkRead_(req) {
+  var user = findPerson_(readSession_(req.session));
+  var other = messageable_().byEmail[normaliseEmail_(req['with'])];
+  var otherEmails = other ? other.emails : [normaliseEmail_(req['with'])];
+  var mine = user.emails, marked = 0;
+  withLock_(function () {
+    var list = loadMessages_();
+    var toMark = list.filter(function (m) { return mine.indexOf(m.to) > -1 && otherEmails.indexOf(m.from) > -1 && !m.readAt; });
+    if (!toMark.length) return;
+    var now = new Date();
+    SpreadsheetApp.openById(cfg_('REGISTRY_ID')).getSheetByName(MSG_TAB)
+      .getRangeList(toMark.map(function (m) { return 'H' + m.row; })).setValue(now);
+    toMark.forEach(function (m) { m.readAt = now.getTime(); });
+    marked = toMark.length;
+    saveMessageCache_(list);
+  });
+  return { ok: true, marked: marked };
+}
+
 function actionSendMessage_(req) {
   var user = findPerson_(readSession_(req.session));
   var people = messageable_();
@@ -135,16 +154,17 @@ function actionSendMessage_(req) {
   if (!to || to.emails.indexOf(user.email) > -1) throw apiError_('bad_request');
   var text = cleanText_(req.text, MSG_MAX_LEN);
   if (!text) throw apiError_('bad_request');
-  var list = loadMessages_();
-  if (countToday_(list, user.email) >= MSG_DAILY) throw apiError_('daily_limit');
-
   var id = 'M' + Utilities.getUuid().replace(/-/g, '').slice(0, 12);
   var now = new Date();
   msgHeaders_();
   withLock_(function () {
-    sheetOf_(MSG_TAB).appendRow([id, now, user.email, safeCell_(user.name), to.email, safeCell_(to.name), safeCell_(text), '']);
+    var list = loadMessages_();
+    if (countToday_(list, user.email) >= MSG_DAILY) throw apiError_('daily_limit');
+    var sh = sheetOf_(MSG_TAB);
+    sh.appendRow([id, now, user.email, safeCell_(user.name), to.email, safeCell_(to.name), safeCell_(text), '']);
+    list.push({ id: id, at: now.getTime(), from: user.email, to: to.email, text: text, readAt: null, row: sh.getLastRow() });
+    saveMessageCache_(list);
   });
-  clearMessageCache_();
   if (typeof notifyPush_ === 'function') {
     try { notifyPush_(to.emails, '💬 New message from ' + user.name, 'Open the portal to read it.', '#messages/' + encodeURIComponent(user.email)); }
     catch (e) { console.warn('push failed: ' + e); }

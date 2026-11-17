@@ -13,6 +13,8 @@ const errText = (e) => MSG_ERRORS[e.message] || ERRORS[e.message] || 'Something 
 const BADGE_MS = 180000, THREAD_MS = 20000, IDLE_MS = 600000;
 
 let badgeTimer = null, threadTimer = null;
+const threads = new Map();   // email -> last thread, so a chat opens instantly
+let inboxMemo = null;
 
 /* ---------- Header button with unread badge ---------- */
 
@@ -48,11 +50,16 @@ export function renderMessages(root, ctx, withEmail) {
     h('section', { class: 'page-head' }, h('h1', {}, '💬 Messages'),
       h('p', {}, 'Send a message to anyone in the team. Only the two of you can read it.')),
     body);
-  callApi('inbox', { session: ctx.session }).then((d) => {
+  const show = (d) => {
     const badge = document.querySelector('.top-msg .msg-badge');
     if (badge) setBadge(badge, d.unread);
+    const typed = body.querySelector('.msg-find');
+    if (typed && typed.value) return;          // don't wipe a name being typed
     body.replaceChildren(newMessage(d.contacts), conversations(d.conversations));
-  }).catch((e) => body.replaceChildren(errorBox(e, ctx, () => renderMessages(root, ctx))));
+  };
+  if (inboxMemo) show(inboxMemo);
+  callApi('inbox', { session: ctx.session }).then((d) => { inboxMemo = d; show(d); })
+    .catch((e) => { if (!inboxMemo) body.replaceChildren(errorBox(e, ctx, () => renderMessages(root, ctx))); });
 }
 
 function newMessage(contacts) {
@@ -102,10 +109,12 @@ function renderThread(root, ctx, email) {
       h('div', { class: 'msg-compose' }, box, h('div', { class: 'msg-compose-row' }, count, send)), status));
 
   const draw = (d) => {
-    title.textContent = `💬 ${d.with.name}`;
-    sub.textContent = d.with.active ? (d.with.designation || '') : 'This person has left; you can read old messages only.';
-    box.disabled = send.disabled = !d.with.active;
-    const sig = d.messages.map((m) => m.id + (m.readAt ? 'r' : '')).join(',');
+    if (d.with.name) {
+      title.textContent = `💬 ${d.with.name}`;
+      sub.textContent = d.with.active ? (d.with.designation || '') : 'This person has left; you can read old messages only.';
+      box.disabled = send.disabled = !d.with.active;
+    }
+    const sig = d.messages.map((m) => m.id + (m.readAt ? 'r' : '') + (m.sending ? 's' : '')).join(',');
     if (sig === shown) return;
     const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
     shown = sig;
@@ -116,16 +125,29 @@ function renderThread(root, ctx, email) {
         !prev || dayLabel(prev.at) !== day ? h('div', { class: 'msg-day' }, day) : null,
         h('div', { class: `msg-bubble${m.mine ? ' mine' : ''}` },
           h('div', { class: 'msg-text' }, m.text),
-          h('div', { class: 'msg-meta' }, timeOf(m.at), m === lastMine && m.readAt ? ' · Seen' : '')),
+          h('div', { class: 'msg-meta' }, timeOf(m.at), m.sending ? ' · Sending…' : m === lastMine && m.readAt ? ' · Seen' : '')),
       ];
     }).flat().filter(Boolean) : [h('p', { class: 'empty' }, 'No messages yet. Say hello!')]));
     if (atBottom || !list.dataset.scrolled) { list.dataset.scrolled = '1'; window.scrollTo(0, document.body.scrollHeight); }
   };
 
-  const fetchThread = () => callApi('thread', { session: ctx.session, with: email }).then(draw);
   const badge = document.querySelector('.top-msg .msg-badge');
-  fetchThread().then(() => callApi('unread', { session: ctx.session }))
-    .then((u) => { if (u && badge) setBadge(badge, u.unread); }).catch((e) => list.replaceChildren(errorBox(e, ctx, () => renderThread(root, ctx, email))));
+  let pending = [];   // messages sent from this screen, not yet confirmed
+  const withPending = (d) => ({ ...d, messages: [...d.messages, ...pending.filter((p) => !d.messages.some((m) => m.id === p.id))] });
+  const markRead = (d) => {
+    if (!d.messages.some((m) => !m.mine && !m.readAt)) return;
+    callApi('markRead', { session: ctx.session, with: email })
+      .then(() => callApi('unread', { session: ctx.session }))
+      .then((u) => { if (u && badge) setBadge(badge, u.unread); inboxMemo = null; })
+      .catch(() => {});
+  };
+  const fetchThread = () => callApi('thread', { session: ctx.session, with: email }).then((d) => {
+    threads.set(email, d);
+    draw(withPending(d));
+    markRead(d);
+  });
+  if (threads.has(email)) draw(withPending(threads.get(email)));
+  fetchThread().catch((e) => { if (!threads.has(email)) list.replaceChildren(errorBox(e, ctx, () => renderThread(root, ctx, email))); });
 
   clearInterval(threadTimer);
   threadTimer = setInterval(() => {
@@ -137,14 +159,30 @@ function renderThread(root, ctx, email) {
   const doSend = async () => {
     const text = box.value.trim();
     if (!text) { box.focus(); return; }
-    send.disabled = true; status.textContent = 'Sending…'; last = Date.now();
+    last = Date.now();
+    // Show it straight away; the server confirms in the background.
+    const temp = { id: `tmp-${Date.now()}`, at: Date.now(), mine: true, text, readAt: null, sending: true };
+    pending.push(temp);
+    box.value = ''; count.textContent = ''; status.textContent = '';
+    const base = threads.get(email) || { with: { name: '', active: true }, messages: [] };
+    draw(withPending(base));
+    window.scrollTo(0, document.body.scrollHeight);
+    box.focus();
     try {
-      await callApi('sendMessage', { session: ctx.session, to: email, text });
-      box.value = ''; count.textContent = ''; status.textContent = '';
-      await fetchThread();
-      window.scrollTo(0, document.body.scrollHeight);
-    } catch (e) { status.textContent = errText(e); }
-    send.disabled = false; box.focus();
+      const r = await callApi('sendMessage', { session: ctx.session, to: email, text });
+      pending = pending.filter((p) => p !== temp);
+      const cur = threads.get(email) || base;
+      const next = { ...cur, messages: [...cur.messages.filter((m) => m.id !== r.message.id), r.message] };
+      threads.set(email, next);
+      inboxMemo = null;
+      draw(withPending(next));
+    } catch (e) {
+      temp.sending = false; temp.failed = true;
+      status.textContent = `${errText(e)} Your text is back in the box.`;
+      pending = pending.filter((p) => p !== temp);
+      if (!box.value) box.value = text;
+      draw(withPending(threads.get(email) || base));
+    }
   };
   send.addEventListener('click', doSend);
   box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); doSend(); } });
