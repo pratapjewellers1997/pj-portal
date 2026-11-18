@@ -5,9 +5,9 @@
  * limits, what to check each month, and how to delete everything from scratch.
  *
  * The tab is written by code, so it can never be lost:
- *   - run setupPortalGuide() from the editor any time, and
- *   - it is rewritten every night by the 23:00 archive timer.
- * If a Registry update or repair removes the tab, it comes back that night.
+ *   - run setupPortalGuide() from the editor after any change (writes it now), and
+ *   - the 23:00 archive timer only CHECKS that the tab exists; if a Registry
+ *     update or repair removed it, it is written back that night.
  */
 
 var GUIDE_TAB = 'Portal Guide';
@@ -41,7 +41,7 @@ function writePortalGuide_() {
   var GAP = { row: ['', '', ''] };
 
   var list = [
-    { title: true, row: ['PJ PORTAL: GUIDE', 'Last updated ' + now + ' IST', 'Written by the portal API (Guide.gs). Rewritten every night at 23:00. Do not edit by hand: changes are replaced.'] },
+    { title: true, row: ['PJ PORTAL: GUIDE', 'Last updated ' + now + ' IST', 'Written by the portal API (Guide.gs). To refresh: Apps Script → run setupPortalGuide. If this tab is deleted, it comes back the same night. Do not edit by hand.'] },
     GAP,
 
     H('1. WHERE EVERYTHING IS STORED', 'Link', 'What it is · who can open it'),
@@ -70,13 +70,13 @@ function writePortalGuide_() {
     R('Portal Checklist Items', 'Leaving / Joining checklist steps.', 'Yes: edit, add or reorder steps.'),
     R('Portal Checklist Log', 'Every tick on a checklist (who, when).', 'No: written by the portal.'),
     R('Portal Devices', 'Phones / computers that get notifications.', 'Only to remove a lost phone (delete its row).'),
-    R('Portal Guide', 'This guide.', 'No: rewritten every night.'),
+    R('Portal Guide', 'This guide.', 'No: written by code (setupPortalGuide).'),
     R('Never touched by the portal', 'System Master, salary, loans, KL_ ledgers, Kaarigar_Payments, customer mobile numbers, GP customer names / rates / costs.', 'The portal never reads or edits these.'),
     GAP,
 
     H('3. TIMERS (Apps Script → ⏰ Triggers)', 'When', 'What it does'),
     R('refreshWorkCache', 'Every 10 minutes (quiet 00:00–07:00 IST)', 'Builds the work snapshot and copies the staff list to Firestore.'),
-    R('archiveChats', 'Every day at 23:00 IST', 'Copies new chat messages to the archive and rewrites both guides.'),
+    R('archiveChats', 'Every day at 23:00 IST', 'Copies new chat messages to the archive. Writes the Portal Guide back only if the tab is missing.'),
     GAP,
 
     H('4. FREE LIMITS (nothing here is ever billed)', 'Limit', 'Note'),
