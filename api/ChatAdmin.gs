@@ -119,6 +119,7 @@ function archiveBook_() {
   var f = Drive.Files.create({ name: 'PJ Portal Chat Archive', mimeType: 'application/vnd.google-apps.spreadsheet', parents: [chatFolderId_()],
                                description: 'Daily copy of PJ Portal chat messages. Private: do not share.' });
   var ss = SpreadsheetApp.openById(f.id);
+  ss.setSpreadsheetTimeZone(TZ);                         // show times in India time
   var msg = ss.getSheets()[0].setName('Messages');
   msg.getRange(1, 1, 1, ARCHIVE_HEADERS.length).setValues([ARCHIVE_HEADERS]).setFontWeight('bold').setBackground('#0B1F3A').setFontColor('#ffffff');
   msg.setFrozenRows(1);
@@ -140,6 +141,7 @@ function archiveChats_() {
     var props = PropertiesService.getScriptProperties();
     var upto = Number(props.getProperty(CHAT_ARCHIVE_UPTO) || 0);
     var ss = archiveBook_(), sh = ss.getSheetByName('Messages');
+    if (ss.getSpreadsheetTimeZone() !== TZ) ss.setSpreadsheetTimeZone(TZ);   // fixes archives made before 0.16.1
     var names = staffNames_();
     var chats = listChats_();
     var many = chatMessagesMany_(chats.map(function (c) { return c._id; }), { after: upto });

@@ -47,6 +47,7 @@ export function renderChecklists(root, ctx) {
 
 function draw(body, d, ctx) {
   const redraw = (fresh) => load(ctx.session, fresh).then((nd) => draw(body, nd, ctx));
+  redraw.local = () => draw(body, d, ctx);   // re-draw from what is on screen, no server call
   const section = (title, list, empty) => {
     const live = list.filter((x) => !x.complete), done = list.filter((x) => x.complete);
     return h('section', { class: 'cl-section' },
@@ -117,22 +118,39 @@ function autoRow(a) {
       a.detail ? h('span', { class: 'muted-sm' }, a.detail) : null, ...extra));
 }
 
+// Ticks show at once and are saved in the background, one after another.
+let saving = Promise.resolve();
+
+function applyTick(p, it, done, by, at) {
+  if (it.done !== done) p.done += done ? 1 : -1;
+  it.done = done; it.by = done ? by : ''; it.at = done ? at : null;
+  p.complete = p.done === p.total ? 1 : 0;
+}
+
 function itemRow(p, it, ctx, redraw) {
   const btn = h('button', {
-    type: 'button', class: `cl-check${it.done ? ' on' : ''}`, role: 'checkbox', 'aria-checked': String(it.done),
+    type: 'button', class: `cl-check${it.done ? ' on' : ''}${it.saving ? ' saving' : ''}`, role: 'checkbox', 'aria-checked': String(it.done),
     'aria-label': it.item,
-    onclick: async () => {
-      btn.disabled = true;
-      try {
-        await callApi('tickChecklist', { session: ctx.session, list: p.list, email: p.email, item: it.item, done: !it.done });
-        open.add(`${p.list}|${p.email}`);
-        redraw(true);
-      } catch (err) { btn.disabled = false; alert(ERRORS[err.message] || 'Could not save. Please try again.'); }
+    onclick: () => {
+      const before = { done: it.done, by: it.by, at: it.at };
+      const want = !it.done;
+      applyTick(p, it, want, ctx.user.name, Date.now());
+      it.saving = true;
+      open.add(`${p.list}|${p.email}`);
+      redraw.local();
+      saving = saving.then(() => callApi('tickChecklist', { session: ctx.session, list: p.list, email: p.email, item: it.item, done: want }))
+        .then((r) => { it.saving = false; if (r && r.at && it.done) it.at = r.at; redraw.local(); })
+        .catch((err) => {
+          it.saving = false;
+          applyTick(p, it, before.done, before.by, before.at);
+          redraw.local();
+          alert(`${ERRORS[err.message] || 'Could not save.'} "${it.item}" was not changed. Please try again.`);
+        });
     },
   }, it.done ? '✓' : '');
   return h('li', { class: `cl-row${it.done ? ' ok' : ''}` }, btn,
     h('div', { class: 'cl-text' }, h('span', {}, it.item),
-      h('span', { class: 'muted-sm' }, [it.who ? `Who: ${it.who}` : '', it.done && it.by ? `Done by ${it.by}${it.at ? ' · ' + fmtDateTime(it.at) : ''}` : ''].filter(Boolean).join(' · '))));
+      h('span', { class: 'muted-sm' }, [it.who ? `Who: ${it.who}` : '', it.done && it.by ? `Done by ${it.by}${it.at ? ' · ' + fmtDateTime(it.at) : ''}` : '', it.saving ? 'Saving…' : ''].filter(Boolean).join(' · '))));
 }
 
 function startBox(d, ctx, redraw) {

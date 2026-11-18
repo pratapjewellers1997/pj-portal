@@ -271,10 +271,19 @@ function actionTickChecklist_(req) {
   var note = cleanText_(req.note, 300);
 
   clHeaders_();
+  var at = new Date();
   withLock_(function () {
     sheetOf_(CL_LOG_TAB).appendRow([list, person.emails[0], safeCell_(person.name), safeCell_(item), done ? 'Yes' : 'No',
-      user.email, safeCell_(user.name), new Date(), safeCell_(note)]);
+      user.email, safeCell_(user.name), at, safeCell_(note)]);
+    // Update the cached copy in place (no full re-read of the Registry on the next page load)
+    var cache = CacheService.getScriptCache(), hit = cache.get(CL_CACHE);
+    if (hit) {
+      try {
+        var cl = JSON.parse(hit);
+        cl.log.push({ list: list, email: person.emails[0], item: item, done: done, by: user.email, byName: user.name, at: at.getTime(), note: note });
+        cache.put(CL_CACHE, JSON.stringify(cl), 300);
+      } catch (e) { cache.remove(CL_CACHE); }
+    }
   });
-  CacheService.getScriptCache().remove(CL_CACHE);
-  return { ok: true };
+  return { ok: true, at: at.getTime() };
 }

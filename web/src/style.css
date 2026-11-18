@@ -645,3 +645,4 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 .ca-danger:disabled { opacity: .5; cursor: default; }
 .msg-audit { background: rgba(201,162,75,.18); border: 1px solid rgba(201,162,75,.5); color: #fff; border-radius: 10px; padding: 8px 12px; font-size: 14px; }
 .msg-audit[hidden] { display: none; }
+.cl-check.saving { opacity: .7; }
