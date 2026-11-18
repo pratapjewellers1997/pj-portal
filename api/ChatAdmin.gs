@@ -134,7 +134,11 @@ function archiveBook_() {
 }
 
 /** Timer target: copies new messages to the archive. */
-function archiveChats() { return archiveChats_(); }
+function archiveChats() {
+  var out = archiveChats_();
+  try { writePortalGuide_(); } catch (e) { console.warn('Portal Guide not written: ' + e); }   // brings the guide back if a Registry update removed it
+  return out;
+}
 
 function archiveChats_() {
   var done = withBuildFlag_('chat_archive', 60000, function () {
