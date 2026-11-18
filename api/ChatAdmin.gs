@@ -134,12 +134,7 @@ function archiveBook_() {
 }
 
 /** Timer target: copies new messages to the archive. */
-function archiveChats() {
-  var out = archiveChats_();
-  // Only if the Portal Guide tab is missing (e.g. removed by a Registry update): write it back. Otherwise nothing is written.
-  try { if (!SpreadsheetApp.openById(cfg_('REGISTRY_ID')).getSheetByName(GUIDE_TAB)) writePortalGuide_(); } catch (e) { console.warn('Portal Guide check: ' + e); }
-  return out;
-}
+function archiveChats() { return archiveChats_(); }
 
 function archiveChats_() {
   var done = withBuildFlag_('chat_archive', 60000, function () {

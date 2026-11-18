@@ -4,10 +4,9 @@
  * One place that answers: where is everything stored, what are the free
  * limits, what to check each month, and how to delete everything from scratch.
  *
- * The tab is written by code, so it can never be lost:
- *   - run setupPortalGuide() from the editor after any change (writes it now), and
- *   - the 23:00 archive timer only CHECKS that the tab exists; if a Registry
- *     update or repair removed it, it is written back that night.
+ * The tab is written by code, so it can never be lost: if it is deleted or
+ * changed, run setupPortalGuide() from the editor and it is written again.
+ * No timer runs this.
  */
 
 var GUIDE_TAB = 'Portal Guide';
@@ -41,7 +40,7 @@ function writePortalGuide_() {
   var GAP = { row: ['', '', ''] };
 
   var list = [
-    { title: true, row: ['PJ PORTAL: GUIDE', 'Last updated ' + now + ' IST', 'Written by the portal API (Guide.gs). To refresh: Apps Script → run setupPortalGuide. If this tab is deleted, it comes back the same night. Do not edit by hand.'] },
+    { title: true, row: ['PJ PORTAL: GUIDE', 'Last updated ' + now + ' IST', 'Written by the portal API (Guide.gs). If this tab is deleted or needs refreshing: Apps Script → run setupPortalGuide. Do not edit by hand.'] },
     GAP,
 
     H('1. WHERE EVERYTHING IS STORED', 'Link', 'What it is · who can open it'),
@@ -76,7 +75,7 @@ function writePortalGuide_() {
 
     H('3. TIMERS (Apps Script → ⏰ Triggers)', 'When', 'What it does'),
     R('refreshWorkCache', 'Every 10 minutes (quiet 00:00–07:00 IST)', 'Builds the work snapshot and copies the staff list to Firestore.'),
-    R('archiveChats', 'Every day at 23:00 IST', 'Copies new chat messages to the archive. Writes the Portal Guide back only if the tab is missing.'),
+    R('archiveChats', 'Every day at 23:00 IST', 'Copies new chat messages to the archive.'),
     GAP,
 
     H('4. FREE LIMITS (nothing here is ever billed)', 'Limit', 'Note'),
