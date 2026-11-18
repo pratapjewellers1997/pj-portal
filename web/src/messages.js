@@ -354,21 +354,31 @@ function pushBar(ctx) {
     const msg = h('span', { class: 'muted-sm' });
     btn.addEventListener('click', async () => {
       btn.disabled = true;
-      try {
-        if (on) {
-          await callApi('pushUnregister', { session: ctx.session, token: on }).catch(() => {});
-          await fbMod.disablePush();
-          localStorage.removeItem('pj_push_token');
-        } else {
-          const token = await fbMod.enablePush();
-          await callApi('pushRegister', { session: ctx.session, token, device: deviceName() });
-          localStorage.setItem('pj_push_token', token);
-        }
+      if (on) {
+        // Instant: switch off on screen, tidy up in the background.
+        localStorage.removeItem('pj_push_token');
         draw();
-      } catch (e) { msg.textContent = errText(e); btn.disabled = false; }
+        callApi('pushUnregister', { session: ctx.session, token: on }).catch(() => {});
+        fbMod.disablePush().catch(() => {});
+        return;
+      }
+      btn.textContent = 'Turning on…';
+      try {
+        const token = await fbMod.enablePush();
+        // Show "on" straight away; save to the server in the background.
+        localStorage.setItem('pj_push_token', token);
+        draw();
+        callApi('pushRegister', { session: ctx.session, token, device: deviceName() }).catch((e) => {
+          localStorage.removeItem('pj_push_token');
+          draw();
+          const m = bar.querySelector('.muted-sm');
+          if (m) m.textContent = 'Could not save this device. ' + errText(e) + ' Please tap Turn on again.';
+        });
+      } catch (e) { msg.textContent = errText(e); btn.textContent = 'Turn on'; btn.disabled = false; }
     });
     bar.replaceChildren(h('span', {}, on ? '🔔 Notifications are on for this device.' : '🔔 Get a notification on this device for new messages, notices and appreciation.'), btn, msg);
   };
+  // pushSupported() also preloads the notification code, so the first tap is quicker.
   fbMod.pushSupported().then((ok) => { if (ok || isIos) draw(); });
   return bar;
 }
