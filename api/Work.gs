@@ -424,14 +424,18 @@ function buildSnapshot_(win) {
   var cutoff = win ? win.from : started - WORK_WINDOW_DAYS * DAY_MS;
   var horizon = win ? win.to : started + WORK_FUTURE_DAYS * DAY_MS;
 
-  // 1. Read every source (one call for tab ids + one batchGet per spreadsheet)
-  var raw = sources.map(function (src) {
-    var t0 = Date.now();
-    var h = { system: src.system, tab: src.tab, type: src.type, rows: 0, error: '', ms: 0 };
-    var book = null;
-    try { book = readBook_(src); } catch (err) { h.error = shortErr_(err); }
-    h.ms = Date.now() - t0;
-    return { src: src, book: book, health: h };
+  // 1. Read every source's sheet — all sources at once (two parallel rounds of
+  //    HTTP calls across every spreadsheet), instead of one source fully
+  //    finishing before the next one starts. Same data, same number of Sheets
+  //    API calls; just not waited-for one at a time.
+  var t0all = Date.now();
+  var fetched = readBooksParallel_(sources);
+  var raw = sources.map(function (src, i) {
+    var f = fetched[i];
+    return {
+      src: src, book: f.book,
+      health: { system: src.system, tab: src.tab, type: src.type, rows: 0, error: f.error || '', ms: Date.now() - t0all }
+    };
   });
 
   // 2. Names: People + every FMS "Doer Emails" tab + EMPLOYEES + Portal Names (MIS wins)
@@ -598,8 +602,8 @@ function unpack_(s) {
 
 /* ================= Reading the sheets ================= */
 
-/** One Sheets API call for tab ids, one batchGet for every tab this source needs. */
-function readBook_(src) {
+/** Which ranges a source needs, keyed the same way the parsers expect. */
+function wantRanges_(src) {
   var want = {};
   if (src.type === 'FMS') { want[src.tab] = q_(src.tab); want['Doer Emails'] = q_('Doer Emails') + '!A:C'; want['DB_Format'] = q_('DB_Format') + '!A:J'; }
   if (src.type === 'Checklist') want[src.tab] = q_(src.tab) + '!A:Z';
@@ -631,21 +635,72 @@ function readBook_(src) {
     want['EMPLOYEES|G'] = q_('EMPLOYEES') + '!G:I';
     want['EMPLOYEES|K'] = q_('EMPLOYEES') + '!K:K';      // Date_Of_Joining (work anniversaries)
   }
+  return want;
+}
 
-  var meta = Sheets.Spreadsheets.get(src.id, { fields: 'sheets.properties(sheetId,title)' });
-  var gids = {};
-  (meta.sheets || []).forEach(function (s) { gids[s.properties.title] = s.properties.sheetId; });
-  if (!(src.tab in gids)) throw new Error('Tab not found: ' + src.tab);
+/** One Sheets API call for tab ids, one batchGet for every tab this source needs. */
+function readBook_(src) {
+  var only = readBooksParallel_([src])[0];
+  if (only.error) throw new Error(only.error);
+  return only.book;
+}
 
-  var keys = Object.keys(want).filter(function (k) { return k.split('|')[0] in gids; });
-  var res = Sheets.Spreadsheets.Values.batchGet(src.id, {
-    ranges: keys.map(function (k) { return want[k]; }),
-    valueRenderOption: 'FORMATTED_VALUE',
-    majorDimension: 'ROWS'
+/**
+ * Same reads as readBook_, for every source at once. Every source's sheet-ID
+ * lookup goes out together, then every source's batchGet goes out together —
+ * two rounds of parallel HTTP calls (Utilities.fetchAll) instead of each
+ * source waiting for the previous one to finish. Same number of Sheets API
+ * calls as before, same read-only ranges; just not done one at a time.
+ * Returns one { book, error } per source, same order, never throws.
+ */
+function readBooksParallel_(sources) {
+  var token = ScriptApp.getOAuthToken();
+  var auth = { Authorization: 'Bearer ' + token };
+  var SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets/';
+
+  // Round 1: tab ids, one request per source, all at once.
+  var metaReqs = sources.map(function (src) {
+    return { url: SHEETS_BASE + src.id + '?fields=' + encodeURIComponent('sheets.properties(sheetId,title)'),
+             method: 'get', headers: auth, muteHttpExceptions: true };
   });
-  var tabs = {};
-  keys.forEach(function (k, i) { tabs[k] = (res.valueRanges[i] && res.valueRanges[i].values) || []; });
-  return { tabs: tabs, gids: gids, url: 'https://docs.google.com/spreadsheets/d/' + src.id };
+  var metaRes = sources.length ? UrlFetchApp.fetchAll(metaReqs) : [];
+
+  var wants = [], gidsBySrc = [], out = sources.map(function () { return { book: null, error: '' }; });
+  sources.forEach(function (src, i) {
+    var r = metaRes[i];
+    if (r.getResponseCode() >= 300) { out[i].error = 'Sheets ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 150); wants[i] = null; return; }
+    var meta;
+    try { meta = JSON.parse(r.getContentText()); } catch (e) { out[i].error = shortErr_(e); wants[i] = null; return; }
+    var gids = {};
+    (meta.sheets || []).forEach(function (s) { gids[s.properties.title] = s.properties.sheetId; });
+    gidsBySrc[i] = gids;
+    if (!(src.tab in gids)) { out[i].error = 'Tab not found: ' + src.tab; wants[i] = null; return; }
+    wants[i] = wantRanges_(src);
+  });
+
+  // Round 2: the actual values, one batchGet request per source (still needing
+  // data), all at once.
+  var pending = [];
+  sources.forEach(function (src, i) {
+    if (!wants[i]) return;
+    var keys = Object.keys(wants[i]).filter(function (k) { return k.split('|')[0] in gidsBySrc[i]; });
+    var qs = keys.map(function (k) { return 'ranges=' + encodeURIComponent(wants[i][k]); }).join('&');
+    pending.push({ i: i, keys: keys,
+      req: { url: SHEETS_BASE + src.id + '/values:batchGet?' + qs + '&valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS',
+             method: 'get', headers: auth, muteHttpExceptions: true } });
+  });
+  var valRes = pending.length ? UrlFetchApp.fetchAll(pending.map(function (p) { return p.req; })) : [];
+
+  pending.forEach(function (p, j) {
+    var r = valRes[j], src = sources[p.i];
+    if (r.getResponseCode() >= 300) { out[p.i].error = 'Sheets ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 150); return; }
+    var body;
+    try { body = JSON.parse(r.getContentText()); } catch (e) { out[p.i].error = shortErr_(e); return; }
+    var tabs = {};
+    p.keys.forEach(function (k, i2) { tabs[k] = (body.valueRanges[i2] && body.valueRanges[i2].values) || []; });
+    out[p.i].book = { tabs: tabs, gids: gidsBySrc[p.i], url: 'https://docs.google.com/spreadsheets/d/' + src.id };
+  });
+  return out;
 }
 
 function q_(tab) { return "'" + String(tab).replace(/'/g, "''") + "'"; }

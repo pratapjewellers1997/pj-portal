@@ -239,8 +239,9 @@ function loadVendorHistory_(sysIds) {
 
   var built = withBuildFlag_(VENDOR_HIST_KEY, 60000, function () {
   try {
-    var raw = loadSourcesCfg_().filter(function (s) { return s.type === 'FMS' && sysIds.indexOf(s.sysId) > -1; })
-      .map(function (src) { return { src: src, book: readBook_(src) }; });
+    var srcs = loadSourcesCfg_().filter(function (s) { return s.type === 'FMS' && sysIds.indexOf(s.sysId) > -1; });
+    var fetched = readBooksParallel_(srcs);
+    var raw = srcs.map(function (src, i) { return { src: src, book: fetched[i].book }; });
     var names = buildNameMap_(raw);
     var tasks = [], items = {}, bases = {};
     raw.forEach(function (r) {
