@@ -141,13 +141,21 @@ export function sendChatMessage({ me, myName, other, otherName, text, file }) {
   const id = chatIdOf(me, other);
   const batch = writeBatch(db);
   const chatRef = doc(db, 'chats', id);
+  // A plain client time, not serverTimestamp(): watchMessages below orders by
+  // this field, and Firestore leaves a document OUT of an orderBy query's
+  // results on the sender's own screen for as long as that field is still a
+  // pending, unresolved serverTimestamp() — which is exactly the bug where a
+  // message you send doesn't show up until you send a second one (the first
+  // one's timestamp finally resolves around the same time, so both appear
+  // together). A plain number is never "pending", so it shows at once.
+  const at = Date.now();
   batch.set(chatRef, {
     members: [me, other].sort(),
     names: { [keyOf(me)]: myName, [keyOf(other)]: otherName },
-    last: { text: (text || (file ? fileLabel(file) : '')).slice(0, 90), at: serverTimestamp(), from: me, kind: file ? file.kind : '' },
+    last: { text: (text || (file ? fileLabel(file) : '')).slice(0, 90), at: at, from: me, kind: file ? file.kind : '' },
     read: { [keyOf(me)]: serverTimestamp() },
   }, { merge: true });
-  const msg = { from: me, text: text || '', at: serverTimestamp() };
+  const msg = { from: me, text: text || '', at: at };
   if (file) msg.file = { id: file.id, name: file.name, mime: file.mime, size: file.size, kind: file.kind };
   batch.set(doc(collection(db, 'chats', id, 'messages')), msg);
   return batch.commit();

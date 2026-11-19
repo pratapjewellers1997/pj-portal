@@ -599,17 +599,24 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 .msg-unread .msg-last { color: var(--ink); font-weight: 600; }
 .msg-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
 .msg-count { background: var(--red); color: #fff; border-radius: 999px; min-width: 20px; padding: 0 6px; font-size: 12px; font-weight: 700; text-align: center; }
+/* The thread page itself never scrolls — it exactly fills the space below the
+   app bar + tabs; only .msg-scroll (the message list) scrolls inside it, so
+   the contact header and the compose box stay in place on screen. */
+.msg-thread-page { display: flex; flex-direction: column; height: calc(100vh - var(--head-h) - var(--tabs-h)); height: calc(100dvh - var(--head-h) - var(--tabs-h)); }
+.msg-thread-page .page-head { flex: 0 0 auto; }
+.msg-thread-page .page-body { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 8px; }
+.msg-scroll { flex: 1 1 auto; overflow-y: auto; min-height: 0; -webkit-overflow-scrolling: touch; }
 .msg-thread { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
 .msg-day { align-self: center; font-size: 12px; color: var(--muted); background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; margin: 8px 0 2px; }
 .msg-bubble { max-width: 82%; align-self: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; padding: 7px 11px; }
 .msg-bubble.mine { align-self: flex-end; background: var(--gold-soft); border-color: #E9D9A8; border-radius: 14px 14px 4px 14px; }
 .msg-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; color: var(--ink); }
 .msg-meta { font-size: 11.5px; color: var(--muted); text-align: right; margin-top: 2px; }
-.msg-compose { position: sticky; bottom: 0; background: var(--cream); padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.msg-compose { flex: 0 0 auto; background: var(--cream); padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
 .msg-input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; resize: vertical; min-height: 48px; background: #fff; }
 .msg-input:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
 .msg-compose-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
-@media (min-width: 900px) { .msg-thread, .msg-compose { max-width: 760px; } }
+@media (min-width: 900px) { .msg-thread, .msg-compose, .msg-scroll { max-width: 760px; width: 100%; margin: 0 auto; } }
 
 /* ---------- Step 13 v2: chat on Firestore ---------- */
 .msg-connect { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }

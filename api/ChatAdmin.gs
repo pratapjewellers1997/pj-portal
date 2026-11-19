@@ -62,10 +62,22 @@ function listChats_() {
 /** Messages of many chats at once. opts: {after, from, to, desc, limit}. Returns {chatId: [msg]}. */
 function chatMessagesMany_(chatIds, opts) {
   var filters = [];
-  var ts = function (ms) { return { timestampValue: new Date(ms).toISOString() }; };
-  if (opts.after) filters.push({ fieldFilter: { field: { fieldPath: 'at' }, op: 'GREATER_THAN', value: ts(opts.after) } });
-  if (opts.from) filters.push({ fieldFilter: { field: { fieldPath: 'at' }, op: 'GREATER_THAN_OR_EQUAL', value: ts(opts.from) } });
-  if (opts.to) filters.push({ fieldFilter: { field: { fieldPath: 'at' }, op: 'LESS_THAN_OR_EQUAL', value: ts(opts.to) } });
+  // Messages sent before this fix have `at` stored as a Firestore server
+  // timestamp; from this fix on, `at` is a plain number (see firebase.js —
+  // it fixes a bug where a just-sent message didn't show up until a second
+  // one was sent). Both forms exist in the data now, and a date-range filter
+  // built for one type never matches the other — so every bound below has to
+  // match EITHER form, or new messages would quietly fall out of the chat
+  // archive, audit exports and the delete tool's date filter.
+  var bound = function (op, ms) {
+    return { compositeFilter: { op: 'OR', filters: [
+      { fieldFilter: { field: { fieldPath: 'at' }, op: op, value: { timestampValue: new Date(ms).toISOString() } } },
+      { fieldFilter: { field: { fieldPath: 'at' }, op: op, value: { integerValue: String(Math.round(ms)) } } },
+    ] } };
+  };
+  if (opts.after) filters.push(bound('GREATER_THAN', opts.after));
+  if (opts.from) filters.push(bound('GREATER_THAN_OR_EQUAL', opts.from));
+  if (opts.to) filters.push(bound('LESS_THAN_OR_EQUAL', opts.to));
   var sq = { from: [{ collectionId: 'messages' }], orderBy: [{ field: { fieldPath: 'at' }, direction: opts.desc ? 'DESCENDING' : 'ASCENDING' }],
              limit: opts.limit || 5000 };
   if (filters.length === 1) sq.where = filters[0];

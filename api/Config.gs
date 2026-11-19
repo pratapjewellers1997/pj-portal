@@ -13,7 +13,7 @@
  * Rule: this API only READS the Registry. It never writes to System Master.
  */
 
-var API_VERSION = '0.19.0';
+var API_VERSION = '0.19.1';
 var SESSION_DAYS = 7;
 var PEOPLE_TAB = 'People';
 var PEOPLE_CACHE_SECONDS = 300; // 5 minutes

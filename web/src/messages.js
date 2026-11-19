@@ -181,6 +181,7 @@ function renderThread(root, ctx, other) {
   const title = h('h1', {}, '💬');
   const sub = h('p', {});
   const list = h('div', { class: 'msg-thread', 'aria-live': 'polite' }, loadingBox('Loading conversation…'));
+  const scroll = h('div', { class: 'msg-scroll' }, list);
   const box = h('textarea', { class: 'msg-input', rows: '2', maxlength: '1000', placeholder: 'Write a message…', 'aria-label': 'Message' });
   const fileIn = h('input', { type: 'file', accept: 'image/*,video/mp4,video/quicktime,video/webm,application/pdf', hidden: true });
   const attach = h('button', { type: 'button', class: 'msg-attach', title: 'Send a photo, video or PDF', 'aria-label': 'Attach a photo, video or PDF' }, '📎');
@@ -188,12 +189,14 @@ function renderThread(root, ctx, other) {
   const status = h('p', { class: 'muted-sm', role: 'status' });
   let otherName = other, otherDesig = '', otherActive = true, messages = [], otherReadAt = 0, msgOff = null, lastMarked = 0;
 
-  root.replaceChildren(
+  // The contact header and the compose box stay in place; only `scroll`
+  // (the message list) scrolls, between them — see .msg-thread-page in CSS.
+  root.replaceChildren(h('div', { class: 'msg-thread-page' },
     h('section', { class: 'page-head' }, h('a', { href: '#messages', class: 'vs-link' }, '← All messages'), title, sub),
-    h('div', { class: 'page-body' }, list,
+    h('div', { class: 'page-body' }, scroll,
       h('div', { class: 'msg-compose' }, box, fileIn,
         h('div', { class: 'msg-compose-row' }, attach, h('span', { class: 'muted-sm msg-hint' }, 'Ctrl+Enter to send'), send)),
-      status));
+      status)));
 
   const setHeader = () => {
     title.textContent = `💬 ${otherName}`;
@@ -208,7 +211,7 @@ function renderThread(root, ctx, other) {
   }, () => {}));
 
   const draw = () => {
-    const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 120;
+    const atBottom = scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 120;
     const lastMine = [...messages].reverse().find((m) => m.from === chat.me);
     list.replaceChildren(...(messages.length ? messages.flatMap((m, i) => {
       const prev = messages[i - 1];
@@ -221,7 +224,7 @@ function renderThread(root, ctx, other) {
             m.pending ? ' · Sending…' : m === lastMine && otherReadAt >= m.at ? ' · Seen' : '')),
       ].filter(Boolean);
     }) : [h('p', { class: 'empty' }, 'No messages yet. Say hello!')]));
-    if (atBottom || !list.dataset.scrolled) { list.dataset.scrolled = '1'; window.scrollTo(0, document.body.scrollHeight); }
+    if (atBottom || !list.dataset.scrolled) { list.dataset.scrolled = '1'; scroll.scrollTop = scroll.scrollHeight; }
   };
 
   const markRead = () => {
