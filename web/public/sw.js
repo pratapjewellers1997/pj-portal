@@ -62,10 +62,20 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || self.registration.scope;
+  const hash = url.slice(url.indexOf('#'));   // '#messages/other%40example.com' (or '' if none)
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const open = wins.find((w) => w.url.startsWith(self.registration.scope));
-    if (open) { await open.focus(); open.navigate ? open.navigate(url) : null; return; }
+    if (open) {
+      await open.focus();
+      // navigate() is not supported everywhere and fails silently on some
+      // browsers; tell the already-open page to route itself too (this also
+      // wakes its chat connection, which can have gone stale while this
+      // window sat in the background — see main.js/messages.js).
+      try { if (open.navigate && hash) await open.navigate(url); } catch {}
+      open.postMessage({ type: 'pj-notification-open', hash });
+      return;
+    }
     await self.clients.openWindow(url);
   })());
 });

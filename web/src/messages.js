@@ -30,6 +30,21 @@ const fileUrls = new Map(); // Drive file id -> object URL (this visit)
 
 const loadFb = () => (fbMod ? Promise.resolve(fbMod) : import('./firebase.js').then((m) => { fbMod = m; return m; }));
 
+// The chat connection can go stale while the phone sleeps or the tab sits in
+// the background (e.g. between taps on a message notification); a nudge when
+// the page comes back to the front clears it instead of leaving the chat
+// stuck on old data for a minute or more. Hooked once, the first time chat
+// connects in this tab.
+let resumeHooked = false;
+function hookResume() {
+  if (resumeHooked) return;
+  resumeHooked = true;
+  const onWake = () => { if (!document.hidden) fbMod.reconnectChat(); };
+  document.addEventListener('visibilitychange', onWake);
+  window.addEventListener('focus', onWake);
+  window.addEventListener('pj-resumed', onWake);
+}
+
 /** Connects chat if Firebase already knows this person. Returns 'ready' | 'signin' | 'not_ready'. */
 async function ensureChat(ctx) {
   if (chat) return 'ready';
@@ -45,6 +60,7 @@ async function ensureChat(ctx) {
   if (!staff) return 'not_ready';
   chat = { me: staff.primary, myName: staff.name || ctx.user.name };
   chatsOff = fb.watchChats(chat.me, (list) => { chats = list; chatSubs.forEach((f) => f(list)); }, () => {});
+  hookResume();
   return 'ready';
 }
 
@@ -79,6 +95,11 @@ export function messagesButton(ctx) {
 
 export function renderMessages(root, ctx, withEmail) {
   pageOffs.forEach((f) => f()); pageOffs = [];
+  // While a Messages page is actually on screen, nudge the connection every
+  // so often so it can never sit stale for long even if nothing else wakes
+  // it (phone screen never off, tab never backgrounded, just an idle moment).
+  const keepAlive = setInterval(() => { if (!document.hidden && fbMod) fbMod.reconnectChat(); }, 60000);
+  pageOffs.push(() => clearInterval(keepAlive));
   const body = h('div', { class: 'page-body' }, loadingBox('Opening chat…'));
   const notice = h('p', { class: 'msg-audit', hidden: true });
   const records = ctx.user.role !== 'Doer' ? h('a', { href: '#chatadmin', class: 'vs-link' }, '⚙️ Chat records') : null;

@@ -8,7 +8,7 @@ import { getAuth, GoogleAuthProvider, signInWithCredential, onAuthStateChanged, 
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, query, where, orderBy, limitToLast, onSnapshot, writeBatch, setDoc, getDoc,
-  serverTimestamp,
+  serverTimestamp, disableNetwork, enableNetwork,
 } from 'firebase/firestore';
 
 export const FIREBASE_CONFIG = {
@@ -46,6 +46,27 @@ export async function connectChat(idToken) {
 }
 
 export function disconnectChat() { return signOut(auth).catch(() => {}); }
+
+/**
+ * Chat's live connection can quietly go stale after a phone sleeps or a tab
+ * sits in the background for a while — the listener keeps running but the
+ * underlying connection is dead, and the SDK does not always notice right
+ * away (that is the "no messages yet, then they all show up a minute or two
+ * later" and "the next message brings both" bug). Dropping and re-raising
+ * the network forces every open listener to resync immediately. Cheap and
+ * safe to call often: it does not touch any listener or pending send, and a
+ * short throttle below stops it from being called back-to-back.
+ */
+let reconnecting = false, lastReconnect = 0;
+export async function reconnectChat() {
+  const now = Date.now();
+  if (reconnecting || now - lastReconnect < 5000) return;
+  reconnecting = true;
+  lastReconnect = now;
+  try { await disableNetwork(db); await enableNetwork(db); }
+  catch { /* fine offline; the listeners will resync once back online */ }
+  finally { reconnecting = false; }
+}
 
 /** My staff record in Firestore: {primary, name, ...} or null if not added yet / inactive. */
 export async function myStaff(email) {

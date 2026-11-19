@@ -122,6 +122,16 @@ start();
 // ---- Install as an app (Android/desktop Chrome offer a prompt; iPhone uses Share > Add to Home Screen)
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  // Tapping a message notification while this tab is already open: the
+  // service worker focuses this tab and tells us where to go. Routing it
+  // here is more reliable than the service worker's own navigate() (not
+  // every browser supports that), and firing 'pj-resumed' wakes the chat
+  // connection, which can have gone stale while this tab sat in the background.
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type !== 'pj-notification-open') return;
+    if (e.data.hash) location.hash = e.data.hash;
+    window.dispatchEvent(new Event('pj-resumed'));
+  });
 }
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
