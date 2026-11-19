@@ -522,7 +522,10 @@ function loadHistory_(range) {
 
 function saveSnapshot_(data) {
   var packed = pack_(data);
-  var canProps = packed.length <= PROP_MAX;
+  // Script properties hold 500 KB in total, shared with other saved values: leave them room.
+  var others = 0, allProps = PropertiesService.getScriptProperties().getProperties();
+  Object.keys(allProps).forEach(function (k) { if (k.indexOf(SNAP_KEY + '_p') !== 0) others += k.length + String(allProps[k]).length; });
+  var canProps = packed.length <= Math.min(PROP_MAX, 490000 - others);
   data.health.sizeKb = Math.round(packed.length / 1024);
   data.health.storedIn = canProps ? ['cache', 'properties'] : ['cache'];
   packed = pack_(data);                                  // re-pack with final health
@@ -541,13 +544,20 @@ function saveSnapshot_(data) {
     var all = props.getProperties(), pparts = {}, m = 0;
     for (var j = 0; j < packed.length; j += PROP_CHUNK) pparts[SNAP_KEY + '_p' + (m++)] = packed.substr(j, PROP_CHUNK);
     pparts[SNAP_KEY + '_pn'] = String(m);
-    props.setProperties(pparts, false);
-    Object.keys(all).forEach(function (k) {                 // remove leftovers from a bigger snapshot
-      var mm = k.match(new RegExp('^' + SNAP_KEY + '_p(\\d+)$'));
-      if (mm && Number(mm[1]) >= m) props.deleteProperty(k);
-    });
+    try {
+      props.setProperties(pparts, false);
+      Object.keys(all).forEach(function (k) {               // remove leftovers from a bigger snapshot
+        var mm = k.match(new RegExp('^' + SNAP_KEY + '_p(\\d+)$'));
+        if (mm && Number(mm[1]) >= m) props.deleteProperty(k);
+      });
+    } catch (e) {
+      // Never let a full Properties store stop the refresh: the cache copy above still serves the portal.
+      console.warn('Snapshot not saved to Properties (cache only): ' + e);
+      try { props.deleteProperty(SNAP_KEY + '_pn'); } catch (e2) {}
+    }
   } else {
     console.warn('Snapshot ' + data.health.sizeKb + ' KB is above the Properties limit; cache only.');
+    try { PropertiesService.getScriptProperties().deleteProperty(SNAP_KEY + '_pn'); } catch (e) {}   // never serve an older copy
   }
 }
 
@@ -1130,8 +1140,7 @@ var ACTIVITY_EVERY_MS = 30 * 60 * 1000;   // refreshed at most every 30 minutes
  */
 function refreshActivity_(force) {
   var props = PropertiesService.getScriptProperties();
-  var old = null;
-  try { old = JSON.parse(props.getProperty(ACTIVITY_KEY) || 'null'); } catch (e) {}
+  var old = loadActivity_();
   if (!force && old && Date.now() - old.builtAt < ACTIVITY_EVERY_MS) return old;
 
   var sheet = SpreadsheetApp.openById(cfg_('REGISTRY_ID')).getSheetByName('Links');
@@ -1152,11 +1161,30 @@ function refreshActivity_(force) {
     } catch (e) { errors.push('"' + (ids[id].label || id) + '" (' + ids[id].join('/') + ')'); }
   });
   var data = { builtAt: Date.now(), files: files, errors: errors };
-  try { props.setProperty(ACTIVITY_KEY, JSON.stringify(data)); } catch (e) { console.warn('Activity too big to store: ' + e); }
+  saveActivity_(props, data);
   return data;
 }
 
+/**
+ * Stored compressed and split into 8.5 KB parts, so any number of linked sheets fits
+ * (one property can hold only 9 KB; the old single-value save failed quietly when bigger,
+ * which made every 10-minute run ask Drive about every file again).
+ */
+function saveActivity_(props, data) {
+  try {
+    var packed = pack_(data), parts = {}, n = 0;
+    for (var i = 0; i < packed.length; i += PROP_CHUNK) parts[ACTIVITY_KEY + '_p' + (n++)] = packed.substr(i, PROP_CHUNK);
+    parts[ACTIVITY_KEY + '_pn'] = String(n);
+    props.setProperties(parts, false);
+    props.deleteProperty(ACTIVITY_KEY);                      // old single-value format
+  } catch (e) { console.warn('Activity not stored: ' + e); }
+}
+
 function loadActivity_() {
-  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(ACTIVITY_KEY) || 'null'); }
-  catch (e) { return null; }
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var packed = joinParts_(function () { return props.getProperties(); }, props.getProperty(ACTIVITY_KEY + '_pn'), ACTIVITY_KEY + '_p');
+    if (packed) return unpack_(packed);
+    return JSON.parse(props.getProperty(ACTIVITY_KEY) || 'null');   // old format, until the next refresh
+  } catch (e) { return null; }
 }
