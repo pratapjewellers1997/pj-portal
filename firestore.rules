@@ -61,7 +61,14 @@ service cloud.firestore {
         allow create: if ok()
           && me() in getAfter(/databases/$(database)/documents/chats/$(chatId)).data.members
           && request.resource.data.from == me()
-          && request.resource.data.at == request.time
+          // 'at' is a plain client-side number (Date.now()), not serverTimestamp():
+          // a pending serverTimestamp() hides a just-sent message from the sender's
+          // own orderBy query until it resolves. A plain number can't be checked for
+          // exact equality with request.time, so just bound it to a sane window
+          // around the server's own clock (guards against spoofed past/future dates).
+          && request.resource.data.at is number
+          && request.resource.data.at >= request.time.toMillis() - 300000
+          && request.resource.data.at <= request.time.toMillis() + 60000
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 1000
           && request.resource.data.keys().hasOnly(['from', 'text', 'at', 'file']);
