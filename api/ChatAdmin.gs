@@ -102,6 +102,36 @@ function fsCommit_(writes) {
   for (var i = 0; i < writes.length; i += 400) fsFetch_('post', ':commit', { writes: writes.slice(i, i + 400) });
 }
 
+/**
+ * ONE-TIME FIX — run this once from the Apps Script editor (pick it from the
+ * function dropdown next to ▶ Run, then Run), then you're done with it.
+ *
+ * Every message's `at` field used to be a Firestore server timestamp; since
+ * the chat "pop-up" fix it's a plain number instead (see the comment in
+ * web/src/firebase.js). Firestore's orderBy sorts by data TYPE first — every
+ * number sorts before every timestamp, no matter what the actual value is.
+ * So a chat with some old (timestamp) and some new (number) messages shows
+ * ALL the new ones first and ALL the old ones after, instead of oldest to
+ * newest — which is the "Today is above Tue 17 Nov" bug. This rewrites
+ * every message's `at` to a plain number so every chat sorts correctly from
+ * here on. Safe to run more than once — it's a no-op the second time.
+ */
+function migrateChatMessageTimestamps() {
+  var chats = listChats_();
+  var many = chatMessagesMany_(chats.map(function (c) { return c._id; }), { limit: 20000 });
+  var writes = [];
+  Object.keys(many).forEach(function (chatId) {
+    (many[chatId] || []).forEach(function (m) {
+      writes.push({
+        update: { name: m._name, fields: { at: { integerValue: String(Math.round(m.at)) } } },
+        updateMask: { fieldPaths: ['at'] },
+      });
+    });
+  });
+  fsCommit_(writes);
+  console.log('Rewrote at on ' + writes.length + ' messages across ' + chats.length + ' chats.');
+}
+
 function staffNames_() {
   var names = {};
   loadPeople_(false).forEach(function (p) { p.emails.forEach(function (e) { names[e] = p.name; }); });
