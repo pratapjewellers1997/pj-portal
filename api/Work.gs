@@ -424,12 +424,13 @@ function buildSnapshot_(win) {
   var cutoff = win ? win.from : started - WORK_WINDOW_DAYS * DAY_MS;
   var horizon = win ? win.to : started + WORK_FUTURE_DAYS * DAY_MS;
 
-  // 1. Read every source's sheet — all sources at once (two parallel rounds of
-  //    HTTP calls across every spreadsheet), instead of one source fully
-  //    finishing before the next one starts. Same data, same number of Sheets
-  //    API calls; just not waited-for one at a time.
+  // 1. Read every source's sheet — skipping any source Drive confirms has
+  //    not changed since we last read it (readBooksSmart_), and reading the
+  //    rest all at once rather than one after another. Same data either way;
+  //    most 10-minute rebuilds only have a few sources actually change, so
+  //    most of the 14 reads are skipped entirely most of the time.
   var t0all = Date.now();
-  var fetched = readBooksParallel_(sources);
+  var fetched = readBooksSmart_(sources);
   var raw = sources.map(function (src, i) {
     var f = fetched[i];
     return {
@@ -700,6 +701,80 @@ function readBooksParallel_(sources) {
     p.keys.forEach(function (k, i2) { tabs[k] = (body.valueRanges[i2] && body.valueRanges[i2].values) || []; });
     out[p.i].book = { tabs: tabs, gids: gidsBySrc[p.i], url: 'https://docs.google.com/spreadsheets/d/' + src.id };
   });
+  return out;
+}
+
+var BOOK_CACHE_TTL = 21600;   // 6 h, same ceiling as the snapshot cache
+
+function bookCacheKey_(src) {
+  return 'book_v1_' + Utilities.base64EncodeWebSafe(Utilities.newBlob(src.id + '|' + src.tab).getBytes()).slice(0, 60);
+}
+
+/**
+ * Same result as readBooksParallel_, but for a source whose spreadsheet
+ * Drive confirms has not changed since the last time we read it, reuses
+ * that cached copy instead of reading it again. Correct by construction:
+ * Drive's modifiedTime changes on ANY edit anywhere in that file — including
+ * a tick on a months-old row — so a source is only ever skipped when
+ * nothing in it could possibly have changed; anything else gets a normal
+ * fresh read. On most 10-minute rebuilds only a handful of the sources have
+ * actually changed, so most of the heavy Sheets reads are skipped outright.
+ * If the cache has nothing, or Drive can't be checked, a source is simply
+ * read fresh — never a reason to miss or delay a real change.
+ */
+function readBooksSmart_(sources) {
+  var cache = CacheService.getScriptCache();
+
+  // One Drive call per distinct spreadsheet (a few sources can share one), all at once.
+  var ids = [];
+  sources.forEach(function (s) { if (ids.indexOf(s.id) === -1) ids.push(s.id); });
+  var modified = {};
+  if (ids.length) {
+    var token = ScriptApp.getOAuthToken();
+    var reqs = ids.map(function (id) {
+      return { url: 'https://www.googleapis.com/drive/v3/files/' + id + '?fields=modifiedTime', method: 'get',
+               headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true };
+    });
+    var res;
+    try { res = UrlFetchApp.fetchAll(reqs); } catch (e) { res = []; }
+    ids.forEach(function (id, i) {
+      var r = res[i];
+      if (r && r.getResponseCode() < 300) {
+        try { modified[id] = JSON.parse(r.getContentText()).modifiedTime || ''; } catch (e2) {}
+      }
+    });
+  }
+
+  var keys = sources.map(bookCacheKey_);
+  var mtVals = keys.length ? cache.getAll(keys.map(function (k) { return k + '_mt'; })) : {};
+  var out = sources.map(function () { return null; }), toRead = [];
+  sources.forEach(function (src, i) {
+    var k = keys[i], cur = modified[src.id], seen = mtVals[k + '_mt'];
+    if (cur && seen && seen === cur) {
+      var packed = joinParts_(function (ks) { return cache.getAll(ks); }, cache.get(k + '_n'), k + '_');
+      if (packed) {
+        try { out[i] = { book: unpack_(packed), error: '' }; return; } catch (e3) { /* fall through to a fresh read */ }
+      }
+    }
+    toRead.push(i);
+  });
+
+  if (toRead.length) {
+    var fresh = readBooksParallel_(toRead.map(function (i) { return sources[i]; }));
+    fresh.forEach(function (f, j) {
+      var i = toRead[j];
+      out[i] = f;
+      if (f.book && modified[sources[i].id]) {
+        try {
+          var packed = pack_(f.book), parts = {}, n = 0;
+          for (var p = 0; p < packed.length; p += CACHE_CHUNK) parts[keys[i] + '_' + (n++)] = packed.substr(p, CACHE_CHUNK);
+          parts[keys[i] + '_n'] = String(n);
+          parts[keys[i] + '_mt'] = modified[sources[i].id];
+          cache.putAll(parts, BOOK_CACHE_TTL);
+        } catch (e4) { /* fine: this source just gets read fresh again next time too */ }
+      }
+    });
+  }
   return out;
 }
 

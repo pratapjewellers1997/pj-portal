@@ -31,39 +31,49 @@ function doGet() {
 }
 
 function doPost(e) {
+  var t0 = Date.now(), action = '?';
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    action = String(req.action || '?');
+    var result;
     switch (req.action) {
-      case 'login': return json_(actionLogin_(req));
-      case 'me':    return json_(actionMe_(req));
-      case 'portal': return json_(actionPortal_(req));
-      case 'work':   return json_(actionWork_(req));
-      case 'lookup': return json_(actionLookup_(req));
-      case 'insights': return json_(actionInsights_(req));
-      case 'karigar':  return json_(actionKarigar_(req));
-      case 'vendors':  return json_(actionVendors_(req));
-      case 'checklists':    return json_(actionChecklists_(req));
-      case 'tickChecklist': return json_(actionTickChecklist_(req));
-      case 'chatUpload':     return json_(actionChatUpload_(req));
-      case 'chatFile':       return json_(actionChatFile_(req));
-      case 'notifyChat':     return json_(actionNotifyChat_(req));
-      case 'pushRegister':   return json_(actionPushRegister_(req));
-      case 'pushUnregister': return json_(actionPushUnregister_(req));
-      case 'chatAdmin':      return json_(actionChatAdmin_(req));
-      case 'chatPurge':      return json_(actionChatPurge_(req));
-      case 'chatAuditSet':   return json_(actionChatAuditSet_(req));
-      case 'auditChats':     return json_(actionAuditChats_(req));
-      case 'auditThread':    return json_(actionAuditThread_(req));
-      case 'archiveNow':     return json_(actionArchiveNow_(req));
-      case 'social':       return json_(actionSocial_(req));
-      case 'postNotice':   return json_(actionPostNotice_(req));
-      case 'readNotice':   return json_(actionReadNotice_(req));
-      case 'removeNotice': return json_(actionRemoveNotice_(req));
-      case 'giveKudos':    return json_(actionGiveKudos_(req));
-      case 'removeKudos':  return json_(actionRemoveKudos_(req));
+      case 'login': result = actionLogin_(req); break;
+      case 'me':    result = actionMe_(req); break;
+      case 'portal': result = actionPortal_(req); break;
+      case 'work':   result = actionWork_(req); break;
+      case 'lookup': result = actionLookup_(req); break;
+      case 'insights': result = actionInsights_(req); break;
+      case 'karigar':  result = actionKarigar_(req); break;
+      case 'vendors':  result = actionVendors_(req); break;
+      case 'checklists':    result = actionChecklists_(req); break;
+      case 'tickChecklist': result = actionTickChecklist_(req); break;
+      case 'chatUpload':     result = actionChatUpload_(req); break;
+      case 'chatFile':       result = actionChatFile_(req); break;
+      case 'notifyChat':     result = actionNotifyChat_(req); break;
+      case 'pushRegister':   result = actionPushRegister_(req); break;
+      case 'pushUnregister': result = actionPushUnregister_(req); break;
+      case 'chatAdmin':      result = actionChatAdmin_(req); break;
+      case 'chatPurge':      result = actionChatPurge_(req); break;
+      case 'chatAuditSet':   result = actionChatAuditSet_(req); break;
+      case 'auditChats':     result = actionAuditChats_(req); break;
+      case 'auditThread':    result = actionAuditThread_(req); break;
+      case 'archiveNow':     result = actionArchiveNow_(req); break;
+      case 'social':       result = actionSocial_(req); break;
+      case 'postNotice':   result = actionPostNotice_(req); break;
+      case 'readNotice':   result = actionReadNotice_(req); break;
+      case 'removeNotice': result = actionRemoveNotice_(req); break;
+      case 'giveKudos':    result = actionGiveKudos_(req); break;
+      case 'removeKudos':  result = actionRemoveKudos_(req); break;
       default:      throw apiError_('unknown_action');
     }
+    var out = json_(result);
+    // Shows up in Apps Script > Executions: which action, how long, how much
+    // data went back — so "this tab feels slow" has a real number behind it
+    // instead of a guess, next time it comes up.
+    console.log('API ' + action + ': ' + (Date.now() - t0) + ' ms, ' + out.getContent().length + ' bytes');
+    return out;
   } catch (err) {
+    console.log('API ' + action + ' failed: ' + (Date.now() - t0) + ' ms');
     if (err && err.apiCode) return json_({ ok: false, error: err.apiCode });
     console.error(err && err.stack ? err.stack : err);
     return json_({ ok: false, error: 'server_error' });
