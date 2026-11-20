@@ -235,6 +235,10 @@ function loadVendorHistory_(sysIds) {
   var cache = CacheService.getScriptCache();
   var packed = joinParts_(function (keys) { return cache.getAll(keys); }, cache.get(VENDOR_HIST_KEY + '_n'), VENDOR_HIST_KEY + '_');
   if (packed) { try { return unpack_(packed); } catch (e) {} }
+  // Nightly build stores in Properties — survives cache clearing
+  var props = PropertiesService.getScriptProperties();
+  var propPacked = joinParts_(function () { return props.getProperties(); }, props.getProperty(VENDOR_HIST_KEY + '_npn'), VENDOR_HIST_KEY + '_np');
+  if (propPacked) { try { return unpack_(propPacked); } catch (e) {} }
   if (!sysIds.length) return [];
 
   var built = withBuildFlag_(VENDOR_HIST_KEY, 60000, function () {

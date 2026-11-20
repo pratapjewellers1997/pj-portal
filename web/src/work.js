@@ -195,8 +195,17 @@ function summaryTable(title, rows, onPick) {
 }
 
 function healthPanel(health) {
+  const warnings = health.warnings || [];
+  const critical = warnings.filter((w) => w.level === 'critical');
+  const warns = warnings.filter((w) => w.level === 'warn');
+  const summaryClass = critical.length ? 'health-critical' : warns.length ? 'health-warn' : '';
+  const summaryIcon = critical.length ? '🔴' : warns.length ? '🟡' : '🟢';
   return h('details', { class: 'health' },
-    h('summary', {}, `Data health (Admin) · ${health.sources.filter((s) => s.error).length} errors · ${health.sizeKb} KB`),
+    h('summary', { class: summaryClass },
+      `${summaryIcon} Data health (Admin) · ${health.sources.filter((s) => s.error).length} errors · ${health.sizeKb} KB` +
+      (warnings.length ? ` · ${warnings.length} warning${warnings.length > 1 ? 's' : ''}` : '')),
+    warnings.length && h('div', { class: 'health-warnings' },
+      warnings.map((w) => h('div', { class: `health-msg ${w.level}` }, w.msg))),
     h('div', { class: 'table-wrap' },
       h('table', { class: 'data' },
         h('thead', {}, h('tr', {}, ['Source', 'Tab', 'Items', 'Time', 'Status', 'Pending vs DB_Format'].map((x) => h('th', {}, x)))),
@@ -211,7 +220,8 @@ function healthPanel(health) {
         s.check.extra ? `in portal but not in DB_Format: ${s.check.extraEx.join('; ')}${s.check.extra > 5 ? ' …' : ''}.` : ''))),
     h('p', { class: 'muted-sm' },
       `Unmatched names: ${health.unmatched.length ? health.unmatched.join(', ') : 'none'} · ` +
-      `stored in ${health.storedIn.join(' + ')} · built in ${(health.totalMs / 1000).toFixed(0)} s`));
+      `stored in ${health.storedIn.join(' + ')} · built in ${(health.totalMs / 1000).toFixed(0)} s` +
+      (health.propUsedKb != null ? ` · Properties: ${health.propUsedKb}/${health.propCapKb} KB` : '')));
 }
 
 function lateBy(ms) {

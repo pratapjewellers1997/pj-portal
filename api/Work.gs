@@ -48,6 +48,15 @@ var SNAP_KEY = 'snap_v2';
 var TZ = 'Asia/Kolkata';
 var DAY_MS = 24 * 60 * 60 * 1000;
 
+/* ===== Step 5: Health-check thresholds ===== */
+var HEALTH_THRESHOLDS = {
+  snapshotKb:  350,     // warn if compressed snapshot exceeds this
+  rebuildMs:   25000,   // warn if rebuild takes longer than this
+  sourceRows:  5000,    // warn if any single source has more rows
+  sourceMs:    8000,    // warn if any single source takes longer than this
+  propPctWarn: 75       // warn when Script Properties usage > this %
+};
+
 /* ================= Public: timer + test ================= */
 
 /** Run once from the editor: refresh the snapshot every 10 minutes. */
@@ -57,6 +66,137 @@ function setupWorkTrigger() {
   });
   ScriptApp.newTrigger('refreshWorkCache').timeBased().everyMinutes(10).create();
   Logger.log('Timer set: refreshWorkCache every 10 minutes (paused 00:00–07:00 IST).');
+}
+
+/**
+ * Run once from the editor: schedule the nightly vendor/GP summary build.
+ * Runs at 02:00 IST (during quiet hours, before the day begins).
+ */
+function setupNightlyTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'nightlyVendorBuild') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('nightlyVendorBuild').timeBased()
+    .atHour(2).nearMinute(15).everyDays(1)
+    .inTimezone(TZ).create();
+  Logger.log('Nightly vendor/GP summary build scheduled at ~02:00 IST.');
+}
+
+/** Nightly target: pre-builds vendor history into Properties so it loads instantly during the day. */
+function nightlyVendorBuild() {
+  var t0 = Date.now();
+  try {
+    var sources = loadSourcesCfg_().filter(function (s) { return s.type === 'FMS'; });
+    if (!sources.length) { console.log('Nightly: no FMS sources found.'); return; }
+    var fetched = readBooksParallel_(sources);
+    var raw = sources.map(function (src, i) { return { src: src, book: fetched[i].book }; });
+    var names = buildNameMap_(raw);
+    var tasks = [], items = {}, bases = {};
+    raw.forEach(function (r) {
+      if (!r.book) return;
+      var list = parseFms_(r.src, r.book, names, 0, 8.64e15);
+      var bk = r.src.sysId + '|' + r.src.tab;
+      bases[bk] = r.book.url + '/edit#gid=' + (r.book.gids[r.src.tab] || 0) + '&range=A';
+      list.forEach(function (t) { t.b = bk; });
+      Object.keys(list.items || {}).forEach(function (k) { items[k] = list.items[k]; });
+      tasks = tasks.concat(list);
+    });
+    var records = vendorRecords_(tasks, items, bases);
+
+    // Store in cache (6 h) AND Properties (survives cache clearing)
+    var packed = pack_(records), cache = CacheService.getScriptCache();
+    var cparts = {}, n = 0;
+    for (var i = 0; i < packed.length; i += CACHE_CHUNK) cparts[VENDOR_HIST_KEY + '_' + (n++)] = packed.substr(i, CACHE_CHUNK);
+    cparts[VENDOR_HIST_KEY + '_n'] = String(n);
+    try { cache.putAll(cparts, 21600); } catch (e) { console.warn('Nightly vendor cache write failed: ' + e); }
+
+    // Also save to Properties for durability (survives all day)
+    var props = PropertiesService.getScriptProperties();
+    var pparts = {}, m = 0;
+    for (var j = 0; j < packed.length; j += PROP_CHUNK) pparts[VENDOR_HIST_KEY + '_np' + (m++)] = packed.substr(j, PROP_CHUNK);
+    pparts[VENDOR_HIST_KEY + '_npn'] = String(m);
+    try { props.setProperties(pparts, false); } catch (e) { console.warn('Nightly vendor Properties write failed: ' + e); }
+
+    console.log('Nightly vendor build: ' + records.length + ' records, ' +
+      Math.round(packed.length / 1024) + ' KB, ' + Math.round((Date.now() - t0) / 1000) + ' s.');
+  } catch (err) {
+    console.error('Nightly vendor build failed: ' + (err.stack || err));
+  }
+}
+
+/**
+ * Run from the editor to archive old rows from a checklist or attendance sheet.
+ * Rows older than the given year are CUT from the source and APPENDED to a new
+ * "Archive YYYY" tab in the same spreadsheet, so the source stays lean.
+ *
+ * Usage: set ARCHIVE_SHEET_ID, ARCHIVE_TAB and ARCHIVE_BEFORE_YEAR below,
+ *        then run archiveOldRows() from the Apps Script editor.
+ *
+ * Example: to archive 2024 and earlier from a Daily Checklist sheet:
+ *   ARCHIVE_SHEET_ID = '1abc...';  ARCHIVE_TAB = 'Daily';  ARCHIVE_BEFORE_YEAR = 2025;
+ */
+var ARCHIVE_SHEET_ID = '';    // set before running
+var ARCHIVE_TAB = '';         // set before running
+var ARCHIVE_BEFORE_YEAR = 0;  // rows with dates before 1 Jan of this year
+
+function archiveOldRows() {
+  if (!ARCHIVE_SHEET_ID || !ARCHIVE_TAB || !ARCHIVE_BEFORE_YEAR) {
+    Logger.log('Set ARCHIVE_SHEET_ID, ARCHIVE_TAB and ARCHIVE_BEFORE_YEAR in Work.gs first.');
+    return;
+  }
+  var ss = SpreadsheetApp.openById(ARCHIVE_SHEET_ID);
+  var src = ss.getSheetByName(ARCHIVE_TAB);
+  if (!src) { Logger.log('Tab not found: ' + ARCHIVE_TAB); return; }
+
+  var data = src.getDataRange().getValues();
+  if (data.length < 2) { Logger.log('No data rows.'); return; }
+  var header = data[0];
+
+  // Find the first column that looks like it contains dates
+  var dateCol = -1;
+  for (var c = 0; c < header.length; c++) {
+    var hName = String(header[c]).toLowerCase();
+    if (hName === 'date' || hName === 'planned date' || hName.indexOf('date') > -1) { dateCol = c; break; }
+  }
+  if (dateCol === -1) {
+    // Try to find dates in the first few data rows
+    for (var cc = 0; cc < Math.min(header.length, 10); cc++) {
+      if (data[1][cc] instanceof Date) { dateCol = cc; break; }
+    }
+  }
+  if (dateCol === -1) { Logger.log('Could not find a date column. Add a column header containing "date".'); return; }
+  Logger.log('Using date column: ' + header[dateCol] + ' (column ' + (dateCol + 1) + ')');
+
+  var cutoff = new Date(ARCHIVE_BEFORE_YEAR, 0, 1);  // 1 Jan of the year
+  var oldRows = [], keepRows = [header];
+  for (var r = 1; r < data.length; r++) {
+    var d = data[r][dateCol];
+    if (d instanceof Date && d < cutoff) oldRows.push(data[r]);
+    else keepRows.push(data[r]);
+  }
+
+  if (!oldRows.length) { Logger.log('No rows older than ' + ARCHIVE_BEFORE_YEAR + '.'); return; }
+  Logger.log('Found ' + oldRows.length + ' old rows to archive, keeping ' + (keepRows.length - 1) + ' rows.');
+
+  // Create or find the archive tab
+  var archiveName = 'Archive ' + (ARCHIVE_BEFORE_YEAR - 1) + ' & earlier';
+  var archiveTab = ss.getSheetByName(archiveName);
+  if (!archiveTab) {
+    archiveTab = ss.insertSheet(archiveName);
+    archiveTab.getRange(1, 1, 1, header.length).setValues([header]);
+    Logger.log('Created archive tab: ' + archiveName);
+  }
+
+  // Append old rows to archive
+  var lastRow = archiveTab.getLastRow();
+  archiveTab.getRange(lastRow + 1, 1, oldRows.length, header.length).setValues(oldRows);
+  Logger.log('Appended ' + oldRows.length + ' rows to ' + archiveName + '.');
+
+  // Replace source with kept rows
+  src.clearContents();
+  if (keepRows.length) src.getRange(1, 1, keepRows.length, header.length).setValues(keepRows);
+  Logger.log('Source tab now has ' + (keepRows.length - 1) + ' data rows (was ' + (data.length - 1) + ').');
+  Logger.log('Done. Archived ' + oldRows.length + ' rows from "' + ARCHIVE_TAB + '" to "' + archiveName + '".');
 }
 
 /** Timer target. */
@@ -533,6 +673,9 @@ function saveSnapshot_(data) {
   var canProps = packed.length <= Math.min(PROP_MAX, 490000 - others);
   data.health.sizeKb = Math.round(packed.length / 1024);
   data.health.storedIn = canProps ? ['cache', 'properties'] : ['cache'];
+  data.health.propUsedKb = Math.round(others / 1024);
+  data.health.propCapKb = Math.round(PROP_MAX / 1024);
+  data.health.warnings = buildHealthWarnings_(data.health, others);
   packed = pack_(data);                                  // re-pack with final health
 
   // Cache: fast layer (Google may clear it any time; that is fine)
@@ -579,6 +722,34 @@ function loadSnapshot_() {
   }
   if (!packed) return null;
   try { return unpack_(packed); } catch (e) { console.warn('Snapshot unreadable: ' + e); return null; }
+}
+
+/** Step 5: Build warnings from thresholds. Each warning: {level:'warn'|'critical', msg}. */
+function buildHealthWarnings_(health, propBytesOther) {
+  var w = [], T = HEALTH_THRESHOLDS;
+  if (health.sizeKb > T.snapshotKb)
+    w.push({ level: health.sizeKb > T.snapshotKb * 1.3 ? 'critical' : 'warn',
+             msg: 'Snapshot size ' + health.sizeKb + ' KB exceeds ' + T.snapshotKb + ' KB threshold.' });
+  if (health.totalMs > T.rebuildMs)
+    w.push({ level: health.totalMs > T.rebuildMs * 1.5 ? 'critical' : 'warn',
+             msg: 'Rebuild took ' + Math.round(health.totalMs / 1000) + ' s (threshold ' + Math.round(T.rebuildMs / 1000) + ' s).' });
+  var propPct = Math.round((propBytesOther / 500000) * 100);
+  if (propPct > T.propPctWarn)
+    w.push({ level: propPct > 90 ? 'critical' : 'warn',
+             msg: 'Script Properties ' + propPct + '% full (non-snapshot usage).' });
+  health.sources.forEach(function (s) {
+    if (s.rows > T.sourceRows)
+      w.push({ level: s.rows > T.sourceRows * 1.5 ? 'critical' : 'warn',
+               msg: s.system + ' (' + s.tab + '): ' + s.rows + ' rows exceeds ' + T.sourceRows + ' limit. Consider archiving old rows.' });
+    if (s.ms > T.sourceMs)
+      w.push({ level: 'warn',
+               msg: s.system + ' (' + s.tab + '): ' + Math.round(s.ms / 1000) + ' s read time exceeds ' + Math.round(T.sourceMs / 1000) + ' s threshold.' });
+  });
+  var errCount = health.sources.filter(function (s) { return s.error; }).length;
+  if (errCount > 0)
+    w.push({ level: errCount > 2 ? 'critical' : 'warn',
+             msg: errCount + ' source(s) failed to read.' });
+  return w;
 }
 
 function joinParts_(getAll, count, prefix) {
