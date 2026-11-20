@@ -616,12 +616,14 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 .msg-input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; resize: vertical; min-height: 48px; background: #fff; }
 .msg-input:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
 .msg-compose-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
-/* Chat page: fill the screen width — no narrow cap.
-   The page-body wrapper already has max-width:1200px; on the messages page
-   we remove that so the chat stretches edge-to-edge like WhatsApp Web,
-   and only add comfortable side padding on wider screens. */
+/* Chat page: fill the screen like WhatsApp Web.
+   Remove the 1200px cap on page-body/page-head and ensure the inner
+   chat elements stretch to 100% so there are no narrow gutters. */
 .msg-thread-page .page-body { max-width: none; }
 .msg-thread-page .page-head  { max-width: none; }
+.msg-scroll   { width: 100%; }
+.msg-thread   { width: 100%; }
+.msg-compose  { width: 100%; }
 
 /* ---------- Step 13 v2: chat on Firestore ---------- */
 .msg-connect { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
