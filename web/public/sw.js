@@ -3,7 +3,7 @@
 // files. Data from the API (script.google.com) and Google sign-in are never
 // cached here; the page keeps its own last-known data.
 
-const CACHE = 'pj-shell-v2';
+const CACHE = 'pj-shell-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './manifest.webmanifest', './icons/icon-192.png'])));
