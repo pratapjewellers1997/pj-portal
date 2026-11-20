@@ -128,6 +128,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   // every browser supports that), and firing 'pj-resumed' wakes the chat
   // connection, which can have gone stale while this tab sat in the background.
   navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'pj-sw-updated') { location.reload(); return; }
     if (e.data?.type !== 'pj-notification-open') return;
     if (e.data.hash) location.hash = e.data.hash;
     window.dispatchEvent(new Event('pj-resumed'));
