@@ -20,6 +20,12 @@
       rel="stylesheet"
     />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Inline chat-width fix: bypasses service-worker cache -->
+    <style>
+      .msg-thread-page .page-body,
+      .msg-thread-page .page-head { max-width: none !important; margin: 0 !important; }
+      .msg-scroll, .msg-thread, .msg-compose { width: 100% !important; }
+    </style>
   </head>
   <body>
     <div id="root"><p class="boot">Loading…</p></div>
