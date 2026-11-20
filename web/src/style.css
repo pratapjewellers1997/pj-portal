@@ -616,7 +616,12 @@ table.scores td.sc { text-align: center; min-width: 70px; }
 .msg-input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; resize: vertical; min-height: 48px; background: #fff; }
 .msg-input:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
 .msg-compose-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+/* A flat 760px cap looked tiny on a real laptop screen (huge empty gutters
+   either side) — widen it in steps as the screen gets bigger instead of
+   leaving it fixed past 900px. */
 @media (min-width: 900px) { .msg-thread, .msg-compose, .msg-scroll { max-width: 760px; width: 100%; margin: 0 auto; } }
+@media (min-width: 1200px) { .msg-thread, .msg-compose, .msg-scroll { max-width: 920px; } }
+@media (min-width: 1600px) { .msg-thread, .msg-compose, .msg-scroll { max-width: 1040px; } }
 
 /* ---------- Step 13 v2: chat on Firestore ---------- */
 .msg-connect { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
