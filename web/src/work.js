@@ -1,6 +1,6 @@
 import { h, safeUrl } from './dom.js';
 import {
-  loadWork, dateBar, selectBox, tile, fmtDateTime, pct, presetRange, loadingBox, ERRORS, markButton,
+  loadWork, dateBar, selectBox, tile, fmtDateTime, pct, presetRange, loadingBox, skeletonWork, ERRORS, markButton,
 } from './workdata.js';
 
 // Work page: tasks from every FMS, both checklists and the Delegation Sheet.
@@ -29,9 +29,9 @@ export function renderWork(root, ctx) {
     body);
 
   const historicHint = new Date(state.from) < new Date(Date.now() - 90 * 864e5);
-  body.replaceChildren(loadingBox(historicHint
-    ? 'Reading older data from the sheets… this can take up to a minute the first time.'
-    : 'Loading…'));
+  body.replaceChildren(historicHint
+    ? loadingBox('Reading older data from the sheets… this can take up to a minute the first time.')
+    : skeletonWork());
 
   loadWork(ctx.session, state.from, state.to)
     .then((data) => draw(body, data, ctx, () => renderWork(root, ctx)))

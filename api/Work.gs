@@ -207,8 +207,19 @@ function refreshWorkCache() {
   }
   var hour = Number(Utilities.formatDate(new Date(), TZ, 'H'));
   if (hour >= QUIET_HOURS[0] && hour < QUIET_HOURS[1]) return;
-  buildSnapshotLocked_(5000);
+
+  // Build snapshot with failure alerting
+  try {
+    var data = buildSnapshotLocked_(5000);
+    if (data) checkSnapshotHealth_(data);
+  } catch (e) {
+    alertMIS_('🔴 Snapshot build failed', 'refreshWorkCache threw: ' + e + '\n\nStack: ' + (e.stack || '(none)'));
+  }
+
   try { refreshActivity_(false); } catch (e) { console.warn('Activity refresh failed: ' + e); }
+
+  // Periodic Properties usage check (once per hour to avoid spamming)
+  checkPropertiesUsage_();
 }
 
 /** Run from the editor: rebuilds now and prints a health report. */
@@ -704,8 +715,13 @@ function saveSnapshot_(data) {
       try { props.deleteProperty(SNAP_KEY + '_pn'); } catch (e2) {}
     }
   } else {
-    console.warn('Snapshot ' + data.health.sizeKb + ' KB is above the Properties limit; cache only.');
-    try { PropertiesService.getScriptProperties().deleteProperty(SNAP_KEY + '_pn'); } catch (e) {}   // never serve an older copy
+    console.warn('Snapshot ' + data.health.sizeKb + ' KB is above the Properties limit; saving to Drive.');
+    try { PropertiesService.getScriptProperties().deleteProperty(SNAP_KEY + '_pn'); } catch (e) {}
+    // Drive fallback: save the snapshot as a file when Properties can't hold it
+    try {
+      saveToDrive_(packed);
+      data.health.storedIn.push('drive');
+    } catch (e) { console.warn('Drive fallback save failed: ' + e); }
   }
 }
 
@@ -719,6 +735,10 @@ function loadSnapshot_() {
       keys.forEach(function (k) { o[k] = all[k]; });
       return o;
     }, props.getProperty(SNAP_KEY + '_pn'), SNAP_KEY + '_p');
+  }
+  // Drive fallback: try loading from a Drive file if cache and Properties both missed
+  if (!packed) {
+    try { packed = loadFromDrive_(); } catch (e) { console.warn('Drive fallback load failed: ' + e); }
   }
   if (!packed) return null;
   try { return unpack_(packed); } catch (e) { console.warn('Snapshot unreadable: ' + e); return null; }
@@ -1488,4 +1508,91 @@ function loadActivity_() {
     if (packed) return unpack_(packed);
     return JSON.parse(props.getProperty(ACTIVITY_KEY) || 'null');   // old format, until the next refresh
   } catch (e) { return null; }
+}
+
+/* ===== Drive-based snapshot overflow ===== */
+
+var DRIVE_SNAP_NAME = 'pj_portal_snapshot.gz';
+
+/** Save packed snapshot to a Drive file (create or overwrite). */
+function saveToDrive_(packed) {
+  var blob = Utilities.newBlob(packed, 'application/octet-stream', DRIVE_SNAP_NAME);
+  var existing = getDriveSnapFile_();
+  if (existing) {
+    existing.setContent(packed);
+  } else {
+    DriveApp.createFile(blob);
+  }
+}
+
+/** Load packed snapshot from a Drive file. Returns the packed string or null. */
+function loadFromDrive_() {
+  var file = getDriveSnapFile_();
+  if (!file) return null;
+  return file.getBlob().getDataAsString();
+}
+
+/** Find the snapshot file in the script owner's Drive root. */
+function getDriveSnapFile_() {
+  var files = DriveApp.getFilesByName(DRIVE_SNAP_NAME);
+  return files.hasNext() ? files.next() : null;
+}
+
+/* ===== Step 6: Error alerting and Properties monitoring ===== */
+
+var ALERT_EMAIL = 'mis@pratapjewellers.in';
+var ALERT_COOLDOWN_KEY = 'alert_cooldown_';
+
+/** Send an email alert, throttled to at most once per hour per subject. */
+function alertMIS_(subject, body) {
+  var cache = CacheService.getScriptCache();
+  var key = ALERT_COOLDOWN_KEY + Utilities.base64Encode(subject);
+  if (cache.get(key)) return; // already alerted this hour
+  try {
+    MailApp.sendEmail(ALERT_EMAIL, 'PJ Portal: ' + subject, body);
+    cache.put(key, '1', 3600); // 1 hour cooldown
+  } catch (e) { console.error('Alert email failed: ' + e); }
+}
+
+/** Check snapshot health and alert if thresholds are breached. */
+function checkSnapshotHealth_(data) {
+  if (!data || !data.health) return;
+  var h = data.health;
+  var warnings = [];
+  if (h.sizeKb > HEALTH_THRESHOLDS.snapshotKb) {
+    warnings.push('Snapshot size ' + h.sizeKb + ' KB exceeds ' + HEALTH_THRESHOLDS.snapshotKb + ' KB threshold');
+  }
+  if (h.totalMs > HEALTH_THRESHOLDS.rebuildMs) {
+    warnings.push('Rebuild took ' + h.totalMs + ' ms (threshold: ' + HEALTH_THRESHOLDS.rebuildMs + ' ms)');
+  }
+  (h.sources || []).forEach(function (s) {
+    if (s.error) warnings.push(s.system + ' [' + s.tab + ']: ERROR — ' + s.error);
+    if (s.rows > HEALTH_THRESHOLDS.sourceRows) {
+      warnings.push(s.system + ' [' + s.tab + ']: ' + s.rows + ' rows exceeds ' + HEALTH_THRESHOLDS.sourceRows + ' threshold');
+    }
+  });
+  if (warnings.length) {
+    alertMIS_('⚠️ Snapshot health warnings', warnings.join('\n') +
+      '\n\nTime: ' + new Date().toLocaleString('en-IN', { timeZone: TZ }));
+  }
+}
+
+/** Check Script Properties usage and warn if nearing limit. */
+function checkPropertiesUsage_() {
+  var cache = CacheService.getScriptCache();
+  if (cache.get('prop_check_done')) return; // check once per hour
+  try {
+    var all = PropertiesService.getScriptProperties().getProperties();
+    var totalBytes = 0;
+    for (var k in all) totalBytes += k.length + all[k].length;
+    var pct = Math.round((totalBytes / 500000) * 100);
+    if (pct > HEALTH_THRESHOLDS.propPctWarn) {
+      alertMIS_('⚠️ Script Properties at ' + pct + '%',
+        'Properties usage: ' + Math.round(totalBytes / 1024) + ' KB of 500 KB (' + pct + '%).\n' +
+        'Threshold: ' + HEALTH_THRESHOLDS.propPctWarn + '%.\n' +
+        'Count: ' + Object.keys(all).length + ' properties.\n\n' +
+        'Consider archiving older data or enabling Drive-based overflow.');
+    }
+    cache.put('prop_check_done', '1', 3600);
+  } catch (e) { console.warn('Properties check failed: ' + e); }
 }

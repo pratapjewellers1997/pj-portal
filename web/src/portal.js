@@ -1,18 +1,34 @@
 import { h, safeUrl, isPhone } from './dom.js';
-import { renderWork } from './work.js';
-import { renderAttendance } from './attendance.js';
-import { renderBoard } from './board.js';
-import { renderScores } from './scores.js';
-import { renderProfile } from './profile.js';
-import { renderInsights } from './insights.js';
-import { renderSearch } from './search.js';
+import { loadWork, ymd, skeletonToday, skeletonWork } from './workdata.js';
+// Eagerly loaded: needed on the home screen immediately
 import { karigarLine } from './karigar.js';
-import { renderVendors } from './vendors.js';
-import { renderChecklists, checklistLine } from './checklists.js';
-import { renderMessages, messagesButton } from './messages.js';
-import { renderChatAdmin } from './chatadmin.js';
+import { checklistLine } from './checklists.js';
+import { messagesButton } from './messages.js';
 import { noticeBoard, kudosWall } from './social.js';
-import { loadWork, ymd } from './workdata.js';
+
+// Lazy-loaded page modules — only fetched when navigated to
+const lazy = {
+  work:       () => import('./work.js'),
+  attendance: () => import('./attendance.js'),
+  board:      () => import('./board.js'),
+  scores:     () => import('./scores.js'),
+  profile:    () => import('./profile.js'),
+  insights:   () => import('./insights.js'),
+  search:     () => import('./search.js'),
+  vendors:    () => import('./vendors.js'),
+  checklists: () => import('./checklists.js'),
+  messages:   () => import('./messages.js'),
+  chatadmin:  () => import('./chatadmin.js'),
+};
+
+/** Load a page module and call its render function, showing a skeleton while it loads */
+async function lazyRender(view, moduleKey, renderName, args) {
+  view.replaceChildren(h('div', { class: 'skeleton' },
+    moduleKey === 'work' ? skeletonWork() : h('div', { style: 'padding:24px;' },
+      ...Array.from({ length: 3 }, () => h('div', { class: 'skeleton-card skeleton' })))));
+  const mod = await lazy[moduleKey]();
+  mod[renderName](view, ...args);
+}
 
 // Function groups in the order agreed in the hand-off.
 const GROUP_ORDER = [
@@ -61,56 +77,57 @@ export function renderPortal(root, data, { onSignOut, session }) {
 
   function route() {
     const [id, param] = (location.hash || '#systems').slice(1).split('/');
+    const tabLabel = (p) => p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label;
+    const drawTabs = (activeId) => {
+      tabs.replaceChildren(...pages.map((p) => h('a', {
+        href: `#${p.id}`, class: `tab${p.id === activeId ? ' on' : ''}`,
+        'aria-current': p.id === activeId ? 'page' : null,
+      }, tabLabel(p))));
+    };
+
     if (id === 'checklists' && user.role !== 'Doer') {
-      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' }, p.label)));
-      renderChecklists(view, ctx);
+      drawTabs('');
+      lazyRender(view, 'checklists', 'renderChecklists', [ctx]);
       window.scrollTo(0, 0);
       return;
     }
     if (id === 'vendors') {
-      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
-        p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
-      renderVendors(view, ctx);
+      drawTabs('');
+      lazyRender(view, 'vendors', 'renderVendors', [ctx]);
       window.scrollTo(0, 0);
       return;
     }
     if (id === 'chatadmin' && user.role !== 'Doer') {
-      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' }, p.label)));
-      renderChatAdmin(view, ctx);
+      drawTabs('');
+      lazyRender(view, 'chatadmin', 'renderChatAdmin', [ctx]);
       window.scrollTo(0, 0);
       return;
     }
     if (id === 'messages') {
-      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
-        p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
-      renderMessages(view, ctx, decodeURIComponent(location.hash.split('/').slice(1).join('/') || ''));
+      drawTabs('');
+      lazyRender(view, 'messages', 'renderMessages', [ctx, decodeURIComponent(location.hash.split('/').slice(1).join('/') || '')]);
       window.scrollTo(0, 0);
       return;
     }
     if (id === 'search') {
-      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
-        p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
-      renderSearch(view, ctx, decodeURIComponent((location.hash.split('/').slice(1).join('/')) || ''));
+      drawTabs('');
+      lazyRender(view, 'search', 'renderSearch', [ctx, decodeURIComponent((location.hash.split('/').slice(1).join('/')) || '')]);
       window.scrollTo(0, 0);
       return;
     }
     if (id === 'person') {
-      tabs.replaceChildren(...pages.map((p) => h('a', { href: `#${p.id}`, class: 'tab' },
-        p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
-      renderProfile(view, ctx, decodeURIComponent(param || ''));
+      drawTabs('');
+      lazyRender(view, 'profile', 'renderProfile', [ctx, decodeURIComponent(param || '')]);
       window.scrollTo(0, 0);
       return;
     }
     const page = pages.find((p) => p.id === id) || pages[0];
-    tabs.replaceChildren(...pages.map((p) => h('a', {
-      href: `#${p.id}`, class: `tab${p.id === page.id ? ' on' : ''}`,
-      'aria-current': p.id === page.id ? 'page' : null,
-    }, p.id === 'work' && user.role === 'Doer' ? 'My work' : p.label)));
-    if (page.id === 'work') renderWork(view, ctx);
-    else if (page.id === 'board') renderBoard(view, ctx);
-    else if (page.id === 'scores') renderScores(view, ctx);
-    else if (page.id === 'insights') renderInsights(view, ctx);
-    else if (page.id === 'attendance') renderAttendance(view, ctx);
+    drawTabs(page.id);
+    if (page.id === 'work') lazyRender(view, 'work', 'renderWork', [ctx]);
+    else if (page.id === 'board') lazyRender(view, 'board', 'renderBoard', [ctx]);
+    else if (page.id === 'scores') lazyRender(view, 'scores', 'renderScores', [ctx]);
+    else if (page.id === 'insights') lazyRender(view, 'insights', 'renderInsights', [ctx]);
+    else if (page.id === 'attendance') lazyRender(view, 'attendance', 'renderAttendance', [ctx]);
     else renderSystems(view, data, ctx);
     window.scrollTo(0, 0);
   }
@@ -307,8 +324,7 @@ function activityLine(systems) {
 /* ---------- Today card: Doers see their day, others see the team ---------- */
 
 function todayCard(ctx) {
-  const box = h('section', { class: 'today', 'aria-live': 'polite' },
-    h('div', { class: 'today-row' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', {}, 'Loading today…')));
+  const box = h('section', { class: 'today', 'aria-live': 'polite' }, skeletonToday());
   const today = ymd(new Date());
   loadWork(ctx.session, today, today).then((d) => {
     const isDoer = d.scope === 'self';

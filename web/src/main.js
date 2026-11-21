@@ -105,6 +105,31 @@ function waitForGoogle() {
   });
 }
 
+/** Silently refresh the session token when it's within 1 day of expiry. */
+function scheduleSessionRefresh(session) {
+  try {
+    const payload = JSON.parse(atob(session.split('.')[0].replace(/-/g, '+').replace(/_/g, '/')));
+    const expiresIn = payload.x - Date.now();
+    const refreshAt = expiresIn - 24 * 60 * 60 * 1000; // 1 day before expiry
+    if (refreshAt <= 0) {
+      // Already within refresh window — refresh now
+      refreshSession(session);
+    } else {
+      setTimeout(() => refreshSession(session), Math.min(refreshAt, 2147483647));
+    }
+  } catch { /* session format unreadable, skip refresh scheduling */ }
+}
+
+async function refreshSession(session) {
+  try {
+    const data = await callApi('refresh_session', { session });
+    if (data.session) {
+      store.set(SESSION_KEY, data.session);
+      scheduleSessionRefresh(data.session);
+    }
+  } catch { /* silent — will re-auth on next page load if expired */ }
+}
+
 function start() {
   if (!CLIENT_ID) { renderSignIn('config_missing'); return; }
   const session = store.get(SESSION_KEY);
@@ -115,6 +140,7 @@ function start() {
   if (cached?.user) renderPortal(root, cached, { onSignOut: signOut, session });
   else renderLoading('Loading your portal…');
   loadPortal(session, cached);
+  scheduleSessionRefresh(session);
 }
 
 start();

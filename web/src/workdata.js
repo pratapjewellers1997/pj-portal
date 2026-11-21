@@ -110,6 +110,30 @@ export function loadingBox(text) {
   return h('div', { class: 'loading' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), text);
 }
 
+/** Skeleton placeholder grid for KPI tiles + task list */
+export function skeletonWork() {
+  return h('div', { class: 'skeleton-work' },
+    h('div', { class: 'kpis' },
+      ...Array.from({ length: 5 }, () => h('div', { class: 'skeleton-kpi' },
+        h('div', { class: 'skeleton-line h28 w60' }),
+        h('div', { class: 'skeleton-line h12 w80' })))),
+    h('div', { class: 'skeleton-tasks' },
+      ...Array.from({ length: 4 }, () => h('div', { class: 'skeleton-card' },
+        h('div', { class: 'skeleton-line h14 w40' }),
+        h('div', { class: 'skeleton-line h16 w90' }),
+        h('div', { class: 'skeleton-line h12 w60' })))));
+}
+
+/** Skeleton placeholder for the today card */
+export function skeletonToday() {
+  return h('div', { class: 'skeleton-today' },
+    h('div', { class: 'skeleton-line h16 w40' }),
+    h('div', { class: 'today-stats' },
+      ...Array.from({ length: 4 }, () => h('div', { class: 'skeleton-kpi' },
+        h('div', { class: 'skeleton-line h22 w50' }),
+        h('div', { class: 'skeleton-line h12 w80' })))));
+}
+
 // ---------- One-tap "Mark done" (opens the step's own pre-filled Google Form) ----------
 // The form is submitted to Google Forms directly, exactly as staff do today.
 // The portal sends nothing to the API: the step turns "done" at the next

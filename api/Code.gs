@@ -38,6 +38,7 @@ function doPost(e) {
     var result;
     switch (req.action) {
       case 'login': result = actionLogin_(req); break;
+      case 'refresh_session': result = actionRefreshSession_(req); break;
       case 'me':    result = actionMe_(req); break;
       case 'portal': result = actionPortal_(req); break;
       case 'work':   result = actionWork_(req); break;
@@ -84,6 +85,13 @@ function actionLogin_(req) {
   var google = verifyGoogleIdToken_(req.idToken);
   var user = findPerson_(google.email);
   user.picture = google.picture;
+  return { ok: true, session: createSession_(user.email), user: user };
+}
+
+/** Refresh a session that is still valid — returns a new token with a fresh expiry. */
+function actionRefreshSession_(req) {
+  var email = readSession_(req.session);
+  var user = findPerson_(email);
   return { ok: true, session: createSession_(user.email), user: user };
 }
 
