@@ -115,7 +115,7 @@ function draw(out, ctx, q) {
       if (!d.items.length) { itemsBox.replaceChildren(); return; }
       itemsBox.replaceChildren(section('Customers & orders', d.total,
         h('ul', { class: 'gs-list' }, d.items.slice(0, MAX_ITEMS).map((it) => h('li', { class: 'gs-item' },
-          h('button', { type: 'button', class: 'gs-row', onclick: () => openOnBoard(it.key) },
+          h('button', { type: 'button', class: 'gs-row', onclick: () => openOnBoard(it.label || it.key) },
             h('span', { class: 'gs-main' },
               h('b', {}, it.label || it.key),
               h('span', { class: 'muted-sm' }, `${it.system}${it.label && it.key !== it.label ? ' · ' + it.key : ''}`)),
