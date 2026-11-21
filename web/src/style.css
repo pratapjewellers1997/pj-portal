@@ -254,6 +254,7 @@ h1 {
 .kpi-amber .kpi-value { color: var(--amber); }
 .kpi-red { border-color: #F1C4C4; background: var(--red-bg); }
 .kpi-red .kpi-value { color: var(--red); }
+.analysis-hint { text-align: center; font-size: 13px; color: var(--muted); margin: -4px 0 8px; }
 .section-title { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; color: var(--navy); margin: 22px 0 10px; padding-left: 10px; border-left: 3px solid var(--gold); }
 .list-title { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin: 18px 0 8px; }
 .table-wrap { overflow-x: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; }

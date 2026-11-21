@@ -1,6 +1,6 @@
 import { h, safeUrl } from './dom.js';
 import {
-  loadWork, dateBar, selectBox, tile, fmtDateTime, pct, presetRange, loadingBox, skeletonWork, ERRORS, markButton,
+  loadWork, dateBar, selectBox, tile, fmtDateTime, pct, presetRange, loadingBox, skeletonWork, ERRORS, markButton, PRESETS,
 } from './workdata.js';
 
 // Work page: tasks from every FMS, both checklists and the Delegation Sheet.
@@ -79,6 +79,13 @@ function draw(body, data, ctx, redraw) {
     tile('Overdue', overdue, overdue ? 'red' : '', carried ? `${carried} from before this range` : ''));
 
   const parts = [filters, kpis];
+
+  // Dynamic analysis period message — shown only for preset (non-custom) date ranges
+  if (state.preset !== 'custom') {
+    const days = Math.round((new Date(state.to) - new Date(state.from)) / 864e5) + 1;
+    parts.push(h('p', { class: 'analysis-hint' }, `Analysis based on ${days} day${days !== 1 ? 's' : ''} · ${PRESETS.find((p) => p.id === state.preset)?.label || state.preset}`));
+  }
+
   if (!isDoer && !state.person && !state.system) parts.push(overview(tasks, data, nameOf, (key) => { state.person = key; draw(body, data, ctx, redraw); }));
   if (!isDoer && !state.person) parts.push(summaryTable('By person', groupBy(tasks, 'person', data.people || [], nameOf),
     (key) => { state.person = key; draw(body, data, ctx, redraw); }));
