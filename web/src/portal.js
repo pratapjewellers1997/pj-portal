@@ -256,8 +256,9 @@ function systemCard(sys, open, openSet) {
     h('span', { class: 'chev', 'aria-hidden': 'true' }, '›')));
   card.append(head,
     h('div', { class: 'card-body' },
-      blurb && h('p', { class: 'blurb' }, blurb),
-      h('ul', { class: 'links' }, sys.links.map((l) => h('li', {}, linkButton(sys, l))))));
+      h('div', { class: 'card-inner' },
+        blurb && h('p', { class: 'blurb' }, blurb),
+        h('ul', { class: 'links' }, sys.links.map((l) => h('li', {}, linkButton(sys, l)))))));
   return card;
 }
 
