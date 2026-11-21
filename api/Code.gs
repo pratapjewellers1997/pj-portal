@@ -65,6 +65,10 @@ function doPost(e) {
       case 'removeNotice': result = actionRemoveNotice_(req); break;
       case 'giveKudos':    result = actionGiveKudos_(req); break;
       case 'removeKudos':  result = actionRemoveKudos_(req); break;
+      case 'inbox':        result = actionInbox_(req); break;
+      case 'thread':       result = actionThread_(req); break;
+      case 'sendMessage':  result = actionSendMessage_(req); break;
+      case 'unread':       result = actionUnread_(req); break;
       default:      throw apiError_('unknown_action');
     }
     var out = json_(result);
