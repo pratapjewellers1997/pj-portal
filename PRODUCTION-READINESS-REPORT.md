@@ -107,7 +107,7 @@ Rules last published: 19 November 2026.
 - **Root cause:** `openOnBoard(it.key)` used role/designation instead of `it.label` (name)
 - **Fix:** Changed to `openOnBoard(it.label || it.key)` in search.js line 118
 - **Commit:** 7f10968
-- **Status:** ✅ Deployed (GitHub Actions build 34s, commit `7f10968`)
+- **Status:** ✅ VERIFIED LIVE — PASS (user confirmed: "Search bar is now working perfectly")
 
 ---
 
@@ -139,7 +139,8 @@ Per standing instructions, the following were NOT changed:
 | CSP iframe fix | ✅ | ✅ `48f2e2e` | ✅ | ✅ |
 | Messages handlers fix | ✅ | ✅ `7b4bbce` | ✅ | ✅ |
 | Messages.gs correct version | ✅ | ✅ `8a6f339` | ✅ | ✅ |
-| Search navigation fix | ✅ | ✅ `7f10968` | ✅ | Pending user test |
+| Search navigation fix | ✅ | ✅ `7f10968` | ✅ | ✅ |
+| Analysis period message | ✅ | ✅ `97f8de9` | ✅ | ✅ |
 
 ---
 
@@ -163,4 +164,4 @@ Per standing instructions, the following were NOT changed:
 
 ## Conclusion
 
-The PJ Portal upgrade is **complete and verified in production**. All code has been implemented, committed, deployed, and verified live. Performance targets are exceeded (259ms DOMContentLoaded vs 500ms target). All 7 functional modules work correctly. Firebase security rules are properly configured. No regressions were introduced. Four bugs were found and fixed during verification, one of which was pre-existing. The GitHub repository is complete with all 13 backend files and 22 frontend files, with no credentials exposed.
+The PJ Portal upgrade is **complete and verified in production**. All code has been implemented, committed, deployed, and verified live. Performance targets are exceeded (259ms DOMContentLoaded vs 500ms target). All 7 functional modules work correctly. Firebase security rules are properly configured. No regressions were introduced. Four bugs were found and fixed during verification, one of which was pre-existing. The GitHub repository is complete with all 13 backend files and 22 frontend files, with no credentials exposed. A post-upgrade improvement (dynamic analysis period message) was also implemented and deployed (commit `97f8de9`). Script Properties audit confirmed full backward compatibility with no migration needed. All 12 commits verified and deployed.

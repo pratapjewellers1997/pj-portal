@@ -123,7 +123,9 @@
 | Messages.gs action handlers | ✅ Deployed & verified live | `7b4bbce` |
 | Messages.gs correct version | ✅ Deployed & verified live | `8a6f339` |
 | CSP iframe fix | ✅ Deployed & verified live | `48f2e2e` |
-| Search navigation fix | ✅ Deployed (34s build) | `7f10968` |
+| Search navigation fix | ✅ Deployed & verified live | `7f10968` |
+| Reports update | ✅ Deployed | `72a8dd2` |
+| Analysis period message | ✅ Deployed | `97f8de9` |
 
 ### Backend (Apps Script)
 | Step | Status |
@@ -177,7 +179,7 @@
 | 1 | Card links visible when collapsed | `grid-template-rows: 0fr` with 2 children | Wrapper `<div class="card-inner">` | `4c77bf8` | ✅ Live |
 | 2 | CSP blocking Google Sheets iframes | `frame-src` missing Google domains | Added `*.google.com` etc. | `48f2e2e` | ✅ Live |
 | 3 | Messages API handlers missing | `inbox/thread/sendMessage/unread` not in doPost | Added 4 case handlers | `7b4bbce` | ✅ Live |
-| 4 | Search → Board wrong query (pre-existing) | `openOnBoard(it.key)` used role text | Changed to `it.label \|\| it.key` | `7f10968` | ✅ Deployed |
+| 4 | Search → Board wrong query (pre-existing) | `openOnBoard(it.key)` used role text | Changed to `it.label \|\| it.key` | `7f10968` | ✅ Verified live |
 
 ---
 
