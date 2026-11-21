@@ -34,8 +34,20 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  // Network first for all assets — guarantees fresh CSS/JS on every deploy.
-  // Falls back to cached copy when offline.
+  // Content-hashed assets (e.g. main-abc123.js, style-def456.css) never change
+  // at the same URL, so cache-first is safe and much faster on repeat visits.
+  // Non-hashed assets (icons, manifest) use network-first.
+  const hashed = /[-\.][a-f0-9]{8,}\.(js|css)$/.test(url.pathname);
+  if (hashed) {
+    event.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+        return res;
+      })),
+    );
+    return;
+  }
+  // Non-hashed assets: network-first, cached fallback.
   event.respondWith(
     fetch(req).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }

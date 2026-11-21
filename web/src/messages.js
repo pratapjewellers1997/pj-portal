@@ -59,6 +59,7 @@ async function ensureChat(ctx) {
   try { staff = await fb.myStaff(u.email); } catch { staff = null; }
   if (!staff) return 'not_ready';
   chat = { me: staff.primary, myName: staff.name || ctx.user.name };
+  try { localStorage.setItem('pj_chat_used', '1'); } catch {}
   chatsOff = fb.watchChats(chat.me, (list) => { chats = list; chatSubs.forEach((f) => f(list)); }, () => {});
   hookResume();
   return 'ready';
@@ -87,7 +88,11 @@ export function messagesButton(ctx) {
     btn.setAttribute('aria-label', n ? `Messages, ${n} unread` : 'Messages');
   };
   chatSubs.add(show);
-  setTimeout(() => ensureChat(ctx).then((s) => { if (s === 'ready') show(chats); }).catch(() => {}), 1500);
+  // Only preload Firebase if the user has previously used chat (push token saved).
+  // Otherwise Firebase's 808 KB bundle loads only when they open #messages.
+  if (localStorage.getItem('pj_push_token') || localStorage.getItem('pj_chat_used')) {
+    setTimeout(() => ensureChat(ctx).then((s) => { if (s === 'ready') show(chats); }).catch(() => {}), 2000);
+  }
   return btn;
 }
 

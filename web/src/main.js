@@ -2,7 +2,11 @@ import './style.css';
 import { callApi } from './api.js';
 import { h } from './dom.js';
 import { renderPortal } from './portal.js';
-import { connectChatAfterLogin, disconnectChatOnSignOut } from './messages.js';
+// Lazy-load chat connection functions — avoids pulling messages.js (and its
+// Firebase dependency) into the main bundle. Firebase loads only when needed.
+const chatModule = () => import('./messages.js');
+const connectChatAfterLogin = (idToken) => chatModule().then((m) => m.connectChatAfterLogin(idToken)).catch(() => {});
+const disconnectChatOnSignOut = () => chatModule().then((m) => m.disconnectChatOnSignOut()).catch(() => {});
 
 // Flow: sign in with Google -> API checks -> portal session (7 days)
 // -> "portal" call returns this person's systems and links from the Feed.
@@ -36,7 +40,8 @@ const store = {
 function signOut() {
   store.set(SESSION_KEY, null);
   store.set(CACHE_KEY, null);
-  disconnectChatOnSignOut();
+  disconnectChatOnSignOut();  // fire-and-forget async cleanup
+  localStorage.removeItem('pj_chat_used');
   if (window.google?.accounts?.id) google.accounts.id.disableAutoSelect();
   renderSignIn();
 }
