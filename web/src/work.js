@@ -80,10 +80,14 @@ function draw(body, data, ctx, redraw) {
 
   const parts = [filters, kpis];
 
-  // Dynamic analysis period message — shown only for preset (non-custom) date ranges
-  if (state.preset !== 'custom') {
+  // Dynamic analysis period message — shown for ALL date ranges (presets, custom, year selection)
+  {
     const days = Math.round((new Date(state.to) - new Date(state.from)) / 864e5) + 1;
-    parts.push(h('p', { class: 'analysis-hint' }, `Analysis based on ${days} day${days !== 1 ? 's' : ''} · ${PRESETS.find((p) => p.id === state.preset)?.label || state.preset}`));
+    const fromDate = new Date(state.from + 'T00:00:00');
+    const toDate = new Date(state.to + 'T00:00:00');
+    const fmtD = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    const yr = toDate.getFullYear();
+    parts.push(h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(fromDate)} to ${fmtD(toDate)} ${yr} · ${days} calendar day${days !== 1 ? 's' : ''}`));
   }
 
   if (!isDoer && !state.person && !state.system) parts.push(overview(tasks, data, nameOf, (key) => { state.person = key; draw(body, data, ctx, redraw); }));

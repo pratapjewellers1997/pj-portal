@@ -47,6 +47,13 @@ export function renderInsights(root, ctx) {
 
 function draw(body, d) {
   const parts = [];
+  // Data period indicator
+  {
+    const [f, t] = PERIODS.find((p) => p[0] === state.period)[2]();
+    const daysN = Math.round((t - f) / 864e5) + 1;
+    const fmtD = (dt) => dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    parts.push(h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(f)} to ${fmtD(t)} ${t.getFullYear()} · ${daysN} calendar day${daysN !== 1 ? 's' : ''}`));
+  }
   if (d.celebrations && d.celebrations.length) parts.push(celebrationsBox(d.celebrations));
 
   parts.push(h('h2', { class: 'section-title' }, 'Sales funnel'));

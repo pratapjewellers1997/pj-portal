@@ -57,6 +57,14 @@ function draw(body, data) {
       selectBox('Person', [['', 'Everyone'], ...(data.people || []).map((p) => [p.email, p.name])], state.person,
         (v) => { state.person = v; draw(body, data); })));
   }
+  // Data period indicator
+  {
+    const daysN = Math.round((new Date(state.to) - new Date(state.from)) / 864e5) + 1;
+    const fromD = new Date(state.from + 'T00:00:00');
+    const toD = new Date(state.to + 'T00:00:00');
+    const fmtD = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    parts.push(h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(fromD)} to ${fmtD(toD)} ${toD.getFullYear()} · ${daysN} calendar day${daysN !== 1 ? 's' : ''}`));
+  }
   parts.push(h('div', { class: 'kpis' },
     tile('Present', present, 'green'),
     tile('Absent', absent, absent ? 'red' : ''),

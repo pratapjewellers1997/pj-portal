@@ -70,9 +70,23 @@ function draw(body, d) {
     list.replaceChildren(...(shown.length ? shown.map((v) => vendorCard(v, d)) : [h('p', { class: 'empty' }, 'No vendor matches.')]));
   }
 
+  // Data period indicator
+  const hintParts = [];
+  if (!d.window.all && d.window.from && d.window.to) {
+    const fromD = new Date(typeof d.window.from === 'number' ? d.window.from : `${d.window.from}T00:00:00`);
+    const toD = new Date(typeof d.window.to === 'number' ? d.window.to : `${d.window.to}T00:00:00`);
+    const daysN = Math.round((toD - fromD) / 864e5) + 1;
+    const fmtD = (dt) => dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    hintParts.push(h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(fromD)} to ${fmtD(toD)} ${toD.getFullYear()} · ${daysN} calendar day${daysN !== 1 ? 's' : ''}`));
+  } else if (d.window.all && d.window.to) {
+    const toD = new Date(typeof d.window.to === 'number' ? d.window.to : `${d.window.to}T00:00:00`);
+    hintParts.push(h('p', { class: 'analysis-hint' }, `Showing all data up to ${toD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} ${toD.getFullYear()}`));
+  }
+
   body.replaceChildren(
     warning(d),
     ...(d.note ? [h('p', { class: 'notice' }, d.note)] : []),
+    ...hintParts,
     h('p', { class: 'muted-sm' },
       d.window.all ? `All orders issued to a vendor, up to ${fmtDay(d.window.to)}` : `Orders issued to a vendor from ${fmtDay(d.window.from)} to ${fmtDay(d.window.to)}`,
       d.sales ? ` · Sales: GP data up to ${d.sales.upTo ? fmtDay(d.sales.upTo) : '— (no data fed yet)'}` : '',

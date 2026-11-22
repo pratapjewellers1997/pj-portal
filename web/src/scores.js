@@ -80,7 +80,14 @@ function draw(body, data, weeks, within) {
   const isDoer = data.scope === 'self';
   const thisWeekIdx = weeks.findIndex((w) => +w === +weeksEnding(1)[0]);
 
-  const parts = [h('div', { class: 'filter-row' },
+  // Data period indicator
+  const fmtD = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  const daysN = Math.round((+weeks[weeks.length - 1] + 6 * 864e5 - +weeks[0]) / 864e5) + 1;
+  const endD = new Date(+weeks[weeks.length - 1] + 6 * 864e5);
+
+  const parts = [
+    h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(weeks[0])} to ${fmtD(endD)} ${endD.getFullYear()} · ${daysN} calendar day${daysN !== 1 ? 's' : ''}`),
+    h('div', { class: 'filter-row' },
     selectBox('Count', [['', 'All work'], ['Checklist', 'Checklists only'], ['FMS', 'FMS only'], ['Delegation', 'Delegation only']],
       state.type, (v) => { state.type = v; draw(body, data, weeks, within); }))];
 
