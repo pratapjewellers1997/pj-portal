@@ -73,7 +73,7 @@ function noticeItem(n, ctx, refresh) {
     h('div', { class: 'nb-meta' },
       `${n.byName} · ${when(n.at)}`,
       n.audience !== 'All' && ` · for ${n.audience === 'Doers' ? 'staff' : 'managers'}`,
-      n.expires && ` · until ${new Date(n.expires + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`),
+      n.expires && ` · until ${new Date(n.expires + 'T00:00:00+05:30').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}`),
     n.readers && h('details', { class: 'nb-receipts' },
       h('summary', {}, `Read by ${n.readers.length} of ${n.readers.length + n.notRead.length}`),
       n.notRead.length ? h('p', { class: 'muted-sm' }, `Not yet: ${n.notRead.join(', ')}`) : h('p', { class: 'muted-sm' }, 'Everyone has read it.')),

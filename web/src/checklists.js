@@ -7,11 +7,16 @@ import { fmtDateTime, loadingBox, ERRORS } from './workdata.js';
 // from the Registry tab "Portal Checklist Items" and are ticked here.
 
 const SESSION_ERRORS = ['session_expired', 'no_session', 'not_registered', 'inactive'];
+const MEMO_TTL = 10 * 60 * 1000;
 let memo = null;
+let memoTs = 0;
 const open = new Set();   // cards the user expanded
 
 const load = (session, fresh) => {
-  if (fresh || !memo) memo = callApi('checklists', { session }).catch((e) => { memo = null; throw e; });
+  if (fresh || !memo || Date.now() - memoTs >= MEMO_TTL) {
+    memo = callApi('checklists', { session }).catch((e) => { memo = null; throw e; });
+    memoTs = Date.now();
+  }
   return memo;
 };
 
@@ -174,5 +179,5 @@ function startBox(d, ctx, redraw) {
 }
 
 function fmtDay(k) {
-  return new Date(`${k}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(`${k}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 }

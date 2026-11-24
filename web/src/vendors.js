@@ -29,6 +29,7 @@ const SORTS = {
 };
 const PERIODS = [['3m', 'Last 3 months'], ['thisMonth', 'This month'], ['lastMonth', 'Last month'],
   ['6m', 'Last 6 months'], ['fy', 'This financial year'], ['all', 'All time']];
+const MEMO_TTL = 10 * 60 * 1000;
 const memo = new Map();
 const state = { sort: 'orders', q: '', period: '3m' };
 
@@ -45,8 +46,12 @@ export function renderVendors(root, ctx) {
       }, label)))),
     body);
   const key = state.period;
-  if (!memo.has(key)) memo.set(key, callApi('vendors', { session: ctx.session, period: key }).catch((e) => { memo.delete(key); throw e; }));
-  memo.get(key).then((d) => { if (state.period === key) draw(body, d); }).catch((e) => body.replaceChildren(h('div', { class: 'notice error' },
+  const cached = memo.get(key);
+  if (!cached || Date.now() - cached.ts >= MEMO_TTL) {
+    const p = callApi('vendors', { session: ctx.session, period: key }).catch((e) => { memo.delete(key); throw e; });
+    memo.set(key, { p, ts: Date.now() });
+  }
+  memo.get(key).p.then((d) => { if (state.period === key) draw(body, d); }).catch((e) => body.replaceChildren(h('div', { class: 'notice error' },
     h('p', {}, ERRORS[e.message] || 'Could not load the vendor scorecard.'),
     SESSION_ERRORS.includes(e.message)
       ? h('button', { type: 'button', class: 'btn-navy', onclick: ctx.onSignOut }, 'Sign in again')
@@ -73,14 +78,16 @@ function draw(body, d) {
   // Data period indicator
   const hintParts = [];
   if (!d.window.all && d.window.from && d.window.to) {
-    const fromD = new Date(typeof d.window.from === 'number' ? d.window.from : `${d.window.from}T00:00:00`);
-    const toD = new Date(typeof d.window.to === 'number' ? d.window.to : `${d.window.to}T00:00:00`);
+    const fromD = new Date(typeof d.window.from === 'number' ? d.window.from : `${d.window.from}T00:00:00+05:30`);
+    const toD = new Date(typeof d.window.to === 'number' ? d.window.to : `${d.window.to}T00:00:00+05:30`);
     const daysN = Math.round((toD - fromD) / 864e5) + 1;
-    const fmtD = (dt) => dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-    hintParts.push(h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(fromD)} to ${fmtD(toD)} ${toD.getFullYear()} · ${daysN} calendar day${daysN !== 1 ? 's' : ''}`));
+    const fmtD = (dt) => dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' });
+    const yrStr = typeof d.window.to === 'string' ? d.window.to.slice(0, 4) : toD.toLocaleDateString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' });
+    hintParts.push(h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(fromD)} to ${fmtD(toD)} ${yrStr} · ${daysN} calendar day${daysN !== 1 ? 's' : ''}`));
   } else if (d.window.all && d.window.to) {
-    const toD = new Date(typeof d.window.to === 'number' ? d.window.to : `${d.window.to}T00:00:00`);
-    hintParts.push(h('p', { class: 'analysis-hint' }, `Showing all data up to ${toD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} ${toD.getFullYear()}`));
+    const toD = new Date(typeof d.window.to === 'number' ? d.window.to : `${d.window.to}T00:00:00+05:30`);
+    const yrStr = typeof d.window.to === 'string' ? d.window.to.slice(0, 4) : toD.toLocaleDateString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' });
+    hintParts.push(h('p', { class: 'analysis-hint' }, `Showing all data up to ${toD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })} ${yrStr}`));
   }
 
   body.replaceChildren(
@@ -204,6 +211,6 @@ function orderRow(o) {
 }
 
 function fmtDay(v) {
-  const d = typeof v === 'number' ? new Date(v) : new Date(`${v}T00:00:00`);
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const d = typeof v === 'number' ? new Date(v) : new Date(`${v}T00:00:00+05:30`);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 }

@@ -83,10 +83,10 @@ function draw(body, data, ctx, redraw) {
   // Dynamic analysis period message — shown for ALL date ranges (presets, custom, year selection)
   {
     const days = Math.round((new Date(state.to) - new Date(state.from)) / 864e5) + 1;
-    const fromDate = new Date(state.from + 'T00:00:00');
-    const toDate = new Date(state.to + 'T00:00:00');
+    const fromDate = new Date(state.from + 'T00:00:00+05:30');
+    const toDate = new Date(state.to + 'T00:00:00+05:30');
     const fmtD = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' });
-    const yr = toDate.getFullYear();
+    const yr = parseInt(state.to.slice(0, 4), 10);
     const weekLabel = (state.preset === 'week' || state.preset === 'lastweek') ? ' (Tue–Mon business week)' : '';
     const updated = data.builtAt ? ` · Last updated ${fmtDateTime(Date.parse(data.builtAt))}` : '';
     parts.push(h('p', { class: 'analysis-hint' }, `${fmtD(fromDate)} to ${fmtD(toDate)} ${yr} · ${days} day${days !== 1 ? 's' : ''}${weekLabel}${updated}`));

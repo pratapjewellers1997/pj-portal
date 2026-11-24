@@ -15,6 +15,7 @@ const PERIODS = [
   ['lastmonth', 'Last month', () => { const t = new Date(); return [new Date(t.getFullYear(), t.getMonth() - 1, 1), new Date(t.getFullYear(), t.getMonth(), 0)]; }],
 ];
 const state = { period: '30d' };
+const MEMO_TTL = 10 * 60 * 1000;
 const memo = new Map();
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
 const fmtPct = (v) => (v == null ? '—' : `${v}%`);
@@ -35,8 +36,12 @@ export function renderInsights(root, ctx) {
   const [f, t] = PERIODS.find((p) => p[0] === state.period)[2]();
   const key = `${ymd(f)}|${ymd(t)}`;
   body.replaceChildren(loadingBox('Working out insights…'));
-  if (!memo.has(key)) memo.set(key, callApi('insights', { session: ctx.session, from: ymd(f), to: ymd(t) }).catch((e) => { memo.delete(key); throw e; }));
-  memo.get(key)
+  const cached = memo.get(key);
+  if (!cached || Date.now() - cached.ts >= MEMO_TTL) {
+    const p = callApi('insights', { session: ctx.session, from: ymd(f), to: ymd(t) }).catch((e) => { memo.delete(key); throw e; });
+    memo.set(key, { p, ts: Date.now() });
+  }
+  memo.get(key).p
     .then((d) => draw(body, d))
     .catch((e) => body.replaceChildren(h('div', { class: 'notice error' },
       h('p', {}, e.message === 'forbidden' ? 'Insights are for managers and owners.' : ERRORS[e.message] || 'Something went wrong. Please try again.'),
@@ -128,7 +133,7 @@ export function celebrationsBox(list) {
       h('b', {}, c.name),
       h('span', {}, `${c.years} year${c.years === 1 ? '' : 's'} with Pratap Jewellers`),
       h('span', { class: c.today ? 'pill pill-green' : 'muted-sm' },
-        c.today ? 'Today!' : new Date(c.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))))));
+        c.today ? 'Today!' : new Date(c.date + 'T00:00:00+05:30').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }))))));
 }
 
 function table(head, rows, warnCol) {

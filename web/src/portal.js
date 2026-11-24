@@ -372,7 +372,7 @@ function pratapCard(p, isDoer) {
   if (!ann.length && !joined.length) return null;
   const now = ann.filter((a) => a.inDays === 0), soon = ann.filter((a) => a.inDays > 0);
   const yrs = (n) => `${n} year${n === 1 ? '' : 's'}`;
-  const day = (k) => new Date(`${k}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  const day = (k) => new Date(`${k}T00:00:00+05:30`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
   const profile = (x) => `#person/${encodeURIComponent(x.email)}`;
   // Doers can only open their own profile, so names are plain text for them.
   const nameEl = (x) => (isDoer ? h('b', {}, x.name) : h('a', { href: profile(x), class: 'pc-name' }, x.name));

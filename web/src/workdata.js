@@ -39,17 +39,18 @@ export function presetRange(id) {
 
 export const MAX_DAYS = 123;
 
-// ---------- Loading (one request per date range, kept for this visit) ----------
+// ---------- Loading (one request per date range, cached with 10-min TTL) ----------
 
+const MEMO_TTL = 10 * 60 * 1000; // 10 minutes — matches backend snapshot refresh
 const memo = new Map();
 
 export function loadWork(session, from, to) {
   const key = `${from}|${to}`;
-  if (!memo.has(key)) {
-    const p = callApi('work', { session, from, to }).catch((err) => { memo.delete(key); throw err; });
-    memo.set(key, p);
-  }
-  return memo.get(key);
+  const cached = memo.get(key);
+  if (cached && Date.now() - cached.ts < MEMO_TTL) return cached.p;
+  const p = callApi('work', { session, from, to }).catch((err) => { memo.delete(key); throw err; });
+  memo.set(key, { p, ts: Date.now() });
+  return p;
 }
 
 export function clearWorkMemo() { memo.clear(); }
@@ -114,7 +115,7 @@ export const fmtDateTime = (ms) => (ms ? new Date(ms).toLocaleString('en-IN', {
   timeZone: 'Asia/Kolkata',
 }) : '—');
 
-export const fmtDay = (key) => new Date(key + 'T00:00:00').toLocaleDateString('en-IN', {
+export const fmtDay = (key) => new Date(key + 'T00:00:00+05:30').toLocaleDateString('en-IN', {
   weekday: 'short', day: 'numeric', month: 'short',
   timeZone: 'Asia/Kolkata',
 });
