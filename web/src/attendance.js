@@ -62,7 +62,7 @@ function draw(body, data) {
     const daysN = Math.round((new Date(state.to) - new Date(state.from)) / 864e5) + 1;
     const fromD = new Date(state.from + 'T00:00:00');
     const toD = new Date(state.to + 'T00:00:00');
-    const fmtD = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+    const fmtD = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' });
     const weekLabel = (state.preset === 'week' || state.preset === 'lastweek') ? ' (Tue–Mon business week)' : '';
     const updated = data.builtAt ? ` · Last updated ${fmtDateTime(Date.parse(data.builtAt))}` : '';
     parts.push(h('p', { class: 'analysis-hint' }, `${fmtD(fromD)} to ${fmtD(toD)} ${toD.getFullYear()} · ${daysN} day${daysN !== 1 ? 's' : ''}${weekLabel}${updated}`));

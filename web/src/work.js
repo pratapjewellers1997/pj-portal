@@ -85,7 +85,7 @@ function draw(body, data, ctx, redraw) {
     const days = Math.round((new Date(state.to) - new Date(state.from)) / 864e5) + 1;
     const fromDate = new Date(state.from + 'T00:00:00');
     const toDate = new Date(state.to + 'T00:00:00');
-    const fmtD = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+    const fmtD = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' });
     const yr = toDate.getFullYear();
     const weekLabel = (state.preset === 'week' || state.preset === 'lastweek') ? ' (Tue–Mon business week)' : '';
     const updated = data.builtAt ? ` · Last updated ${fmtDateTime(Date.parse(data.builtAt))}` : '';

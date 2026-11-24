@@ -1,9 +1,22 @@
 import { callApi } from './api.js';
 import { h } from './dom.js';
 
-// ---------- Dates (the phone's local time, i.e. IST for staff) ----------
+// ---------- Dates (pinned to IST so every device sees the same business day) ----------
 
 const pad = (n) => String(n).padStart(2, '0');
+
+/** Return a Date whose year/month/day/weekday match the current IST wall-clock,
+ *  regardless of the browser's local timezone. The returned Date is a plain
+ *  local-Date object (not UTC) so getDay()/getMonth()/getDate() all work. */
+function nowIST() {
+  const now = new Date();
+  // IST is UTC+5:30 → +330 minutes.  getTimezoneOffset() is negative east of GMT.
+  const istMs = now.getTime() + (now.getTimezoneOffset() + 330) * 60000;
+  const ist = new Date(istMs);
+  // Return a clean midnight date so preset ranges are day-aligned
+  return new Date(ist.getFullYear(), ist.getMonth(), ist.getDate());
+}
+
 export const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const tuesday = (d) => addDays(d, -((d.getDay() + 5) % 7));
@@ -20,7 +33,7 @@ export const PRESETS = [
 
 export function presetRange(id) {
   const p = PRESETS.find((x) => x.id === id);
-  const [a, b] = p.range(new Date());
+  const [a, b] = p.range(nowIST());
   return { from: ymd(a), to: ymd(b) };
 }
 
@@ -98,10 +111,12 @@ export function tile(label, value, tone = '', hint = '') {
 
 export const fmtDateTime = (ms) => (ms ? new Date(ms).toLocaleString('en-IN', {
   day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+  timeZone: 'Asia/Kolkata',
 }) : '—');
 
 export const fmtDay = (key) => new Date(key + 'T00:00:00').toLocaleDateString('en-IN', {
   weekday: 'short', day: 'numeric', month: 'short',
+  timeZone: 'Asia/Kolkata',
 });
 
 export const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
