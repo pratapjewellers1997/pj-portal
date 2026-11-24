@@ -8,7 +8,7 @@ import {
 // Doer: own attendance only. Manager / Owner / Admin: everyone.
 
 const SESSION_ERRORS = ['session_expired', 'no_session', 'not_registered', 'inactive'];
-const state = { preset: 'month', ...presetRange('month'), person: '' };
+const state = { preset: 'week', ...presetRange('week'), person: '' };
 
 export function renderAttendance(root, ctx) {
   const isDoer = ctx.user.role === 'Doer';
@@ -62,8 +62,10 @@ function draw(body, data) {
     const daysN = Math.round((new Date(state.to) - new Date(state.from)) / 864e5) + 1;
     const fromD = new Date(state.from + 'T00:00:00');
     const toD = new Date(state.to + 'T00:00:00');
-    const fmtD = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-    parts.push(h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(fromD)} to ${fmtD(toD)} ${toD.getFullYear()} · ${daysN} calendar day${daysN !== 1 ? 's' : ''}`));
+    const fmtD = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+    const weekLabel = (state.preset === 'week' || state.preset === 'lastweek') ? ' (Tue–Mon business week)' : '';
+    const updated = data.builtAt ? ` · Last updated ${fmtDateTime(Date.parse(data.builtAt))}` : '';
+    parts.push(h('p', { class: 'analysis-hint' }, `${fmtD(fromD)} to ${fmtD(toD)} ${toD.getFullYear()} · ${daysN} day${daysN !== 1 ? 's' : ''}${weekLabel}${updated}`));
   }
   parts.push(h('div', { class: 'kpis' },
     tile('Present', present, 'green'),
@@ -107,7 +109,10 @@ function draw(body, data) {
   }
 
   parts.push(h('h2', { class: 'section-title' }, 'Day by day'));
-  if (!days.length) parts.push(h('p', { class: 'empty' }, 'No attendance for this selection.'));
+  if (!days.length) {
+    const msg = (state.preset === 'week') ? 'No records available for this week.' : 'No attendance for this selection.';
+    parts.push(h('p', { class: 'empty' }, msg));
+  }
   else {
     parts.push(h('ul', { class: 'days' }, days.map((d) => h('li', { class: `day${d.late ? ' is-late' : ''}${/absent/i.test(d.status) ? ' is-absent' : ''}` },
       h('div', { class: 'day-top' },

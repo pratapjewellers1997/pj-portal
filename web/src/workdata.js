@@ -6,13 +6,13 @@ import { h } from './dom.js';
 const pad = (n) => String(n).padStart(2, '0');
 export const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-const monday = (d) => addDays(d, -((d.getDay() + 6) % 7));
+const tuesday = (d) => addDays(d, -((d.getDay() + 5) % 7));
 
 export const PRESETS = [
   { id: 'today', label: 'Today', range: (t) => [t, t] },
   { id: 'yesterday', label: 'Yesterday', range: (t) => [addDays(t, -1), addDays(t, -1)] },
-  { id: 'week', label: 'This week', range: (t) => [monday(t), addDays(monday(t), 6)] },
-  { id: 'lastweek', label: 'Last week', range: (t) => [addDays(monday(t), -7), addDays(monday(t), -1)] },
+  { id: 'week', label: 'This week', range: (t) => [tuesday(t), addDays(tuesday(t), 6)] },
+  { id: 'lastweek', label: 'Last week', range: (t) => [addDays(tuesday(t), -7), addDays(tuesday(t), -1)] },
   { id: 'month', label: 'This month', range: (t) => [new Date(t.getFullYear(), t.getMonth(), 1), new Date(t.getFullYear(), t.getMonth() + 1, 0)] },
   { id: 'lastmonth', label: 'Last month', range: (t) => [new Date(t.getFullYear(), t.getMonth() - 1, 1), new Date(t.getFullYear(), t.getMonth(), 0)] },
   { id: 'custom', label: 'Custom', range: null },

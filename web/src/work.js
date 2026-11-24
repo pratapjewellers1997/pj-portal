@@ -85,9 +85,11 @@ function draw(body, data, ctx, redraw) {
     const days = Math.round((new Date(state.to) - new Date(state.from)) / 864e5) + 1;
     const fromDate = new Date(state.from + 'T00:00:00');
     const toDate = new Date(state.to + 'T00:00:00');
-    const fmtD = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    const fmtD = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
     const yr = toDate.getFullYear();
-    parts.push(h('p', { class: 'analysis-hint' }, `Showing data from ${fmtD(fromDate)} to ${fmtD(toDate)} ${yr} · ${days} calendar day${days !== 1 ? 's' : ''}`));
+    const weekLabel = (state.preset === 'week' || state.preset === 'lastweek') ? ' (Tue–Mon business week)' : '';
+    const updated = data.builtAt ? ` · Last updated ${fmtDateTime(Date.parse(data.builtAt))}` : '';
+    parts.push(h('p', { class: 'analysis-hint' }, `${fmtD(fromDate)} to ${fmtD(toDate)} ${yr} · ${days} day${days !== 1 ? 's' : ''}${weekLabel}${updated}`));
   }
 
   if (!isDoer && !state.person && !state.system) parts.push(overview(tasks, data, nameOf, (key) => { state.person = key; draw(body, data, ctx, redraw); }));
@@ -127,11 +129,14 @@ function draw(body, data, ctx, redraw) {
       }, `Show more (${list.length - limit} left)`));
     }
   });
-  if (!any) parts.push(h('p', { class: 'empty' }, 'No tasks for this selection.'));
+  if (!any) {
+    const msg = (state.preset === 'week') ? 'No records available for this week.' : 'No tasks for this selection.';
+    parts.push(h('p', { class: 'empty' }, msg));
+  }
 
   if (data.health) parts.push(healthPanel(data.health));
   parts.push(h('p', { class: 'foot-note' },
-    `${data.historic ? 'Read from the sheets' : 'Data refreshed'} ${fmtDateTime(Date.parse(data.builtAt))} · updates every 10 minutes`));
+    `${data.historic ? 'Read from the sheets' : 'Snapshot data'} · updates every 10 minutes`));
   body.replaceChildren(...parts.filter(Boolean));
 }
 
