@@ -33,6 +33,8 @@ const MEMO_TTL = 10 * 60 * 1000;
 const memo = new Map();
 const state = { sort: 'orders', q: '', period: '3m' };
 
+export function resetVendors() { memo.clear(); state.sort = 'orders'; state.q = ''; state.period = '3m'; }
+
 export function renderVendors(root, ctx) {
   const body = h('div', { class: 'page-body' }, loadingBox(state.period === '3m' ? 'Loading vendor scorecard…'
     : 'Loading vendor scorecard… (older orders can take up to a minute the first time)'));

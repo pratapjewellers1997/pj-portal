@@ -10,6 +10,8 @@ import {
 const SESSION_ERRORS = ['session_expired', 'no_session', 'not_registered', 'inactive'];
 const state = { preset: 'week', ...presetRange('week'), person: '' };
 
+export function resetAttendance() { Object.assign(state, { preset: 'week', ...presetRange('week'), person: '' }); }
+
 export function renderAttendance(root, ctx) {
   const isDoer = ctx.user.role === 'Doer';
   const body = h('div', { class: 'page-body' });

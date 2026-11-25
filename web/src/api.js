@@ -73,4 +73,7 @@ async function callWithRetry(action, payload) {
   }
 }
 
+/** Cancel all in-flight deduplication entries (call on sign-out). */
+export function clearInflight() { inflight.clear(); }
+
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }

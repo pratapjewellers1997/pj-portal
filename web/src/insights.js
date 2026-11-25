@@ -20,6 +20,9 @@ const memo = new Map();
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
 const fmtPct = (v) => (v == null ? '—' : `${v}%`);
 
+/** Clear all cached state (call on sign-out). */
+export function resetInsights() { memo.clear(); state.period = '30d'; }
+
 export function renderInsights(root, ctx) {
   const body = h('div', { class: 'page-body' });
   root.replaceChildren(

@@ -9,6 +9,8 @@ import { GOOD, OK, tone, pctOf, weeksEnding, weeksOfMonth, scoreRows, bestThisWe
 const SESSION_ERRORS = ['session_expired', 'no_session', 'not_registered', 'inactive'];
 const state = { period: '8w', offset: 0, month: '', type: '' };
 
+export function resetScores() { Object.assign(state, { period: '8w', offset: 0, month: '', type: '' }); }
+
 function lastMonths(n) {
   const out = [], d = new Date();
   for (let i = 0; i < n; i++) {

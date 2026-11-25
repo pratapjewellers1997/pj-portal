@@ -132,6 +132,19 @@ export function renderPortal(root, data, { onSignOut, session }) {
     window.scrollTo(0, 0);
   }
   window.onhashchange = route;
+
+  // Auto-refresh: re-render the active dashboard page when the user returns
+  // to a tab that has been hidden long enough for the memo cache to expire.
+  // The 10-min memo TTL in workdata/insights/vendors/checklists ensures a fresh
+  // API call happens automatically; we just need to trigger the re-render.
+  let hiddenSince = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenSince = Date.now(); return; }
+    // Re-render if hidden for ≥ 10 min (matches MEMO_TTL)
+    if (hiddenSince && Date.now() - hiddenSince >= 10 * 60 * 1000) route();
+    hiddenSince = 0;
+  });
+
   route();
 }
 

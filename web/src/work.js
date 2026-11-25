@@ -18,6 +18,8 @@ const SESSION_ERRORS = ['session_expired', 'no_session', 'not_registered', 'inac
 
 const state = { preset: 'week', ...presetRange('week'), person: '', system: '', status: 'all', doneShown: 30 };
 
+export function resetWork() { Object.assign(state, { preset: 'week', ...presetRange('week'), person: '', system: '', status: 'all', doneShown: 30 }); }
+
 export function renderWork(root, ctx) {
   const isDoer = ctx.user.role === 'Doer';
   const body = h('div', { class: 'page-body' });

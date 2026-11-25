@@ -30,6 +30,8 @@ const lookups = new Map(); // query -> promise, kept for this visit
 let timer = null;
 let token = 0;
 
+export function resetSearch() { lookups.clear(); clearTimeout(timer); timer = null; token = 0; }
+
 export function renderSearch(root, ctx, q0 = '') {
   const input = h('input', {
     class: 'search gs-input', type: 'search', value: q0, autocomplete: 'off', enterkeyhint: 'search',

@@ -12,6 +12,8 @@ let memo = null;
 let memoTs = 0;
 const open = new Set();   // cards the user expanded
 
+export function resetChecklists() { memo = null; memoTs = 0; open.clear(); saving = Promise.resolve(); }
+
 const load = (session, fresh) => {
   if (fresh || !memo || Date.now() - memoTs >= MEMO_TTL) {
     memo = callApi('checklists', { session }).catch((e) => { memo = null; throw e; });

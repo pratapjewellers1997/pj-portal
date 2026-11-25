@@ -14,6 +14,8 @@ const STATUS = {
 };
 const state = { system: '', q: '' };
 
+export function resetBoard() { state.system = ''; state.q = ''; }
+
 /** Used by Search: open the Board with this customer / order already looked up. */
 export function setBoardQuery(q) { state.q = String(q || ''); }
 

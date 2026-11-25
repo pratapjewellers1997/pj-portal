@@ -73,6 +73,12 @@ export function connectChatAfterLogin(idToken) {
 export function disconnectChatOnSignOut() {
   if (chatsOff) chatsOff();
   chat = null; chats = []; chatsOff = null;
+  pageOffs.forEach((f) => f()); pageOffs = [];
+  chatSubs.clear();
+  fileUrls.forEach((url) => { try { URL.revokeObjectURL(url); } catch (_) {} });
+  fileUrls.clear();
+  fileInflight.clear();
+  resumeHooked = false;
   if (fbMod) fbMod.disconnectChat();
 }
 
@@ -309,22 +315,59 @@ function renderThread(root, ctx, other) {
 
 /* ---------- Files ---------- */
 
-function fileView(file, ctx) {
-  const wrap = h('div', { class: `msg-file msg-file-${file.kind}` });
-  const load = async () => {
-    if (fileUrls.has(file.id)) return fileUrls.get(file.id);
-    const r = await callApi('chatFile', { session: ctx.session, id: file.id });
+const FILE_CACHE_MAX = 50; // cap object URLs in memory; evict oldest when exceeded
+const fileInflight = new Map(); // file id -> Promise (dedup simultaneous downloads)
+
+function fetchFile(file, ctx) {
+  // Return cached object URL immediately
+  if (fileUrls.has(file.id)) {
+    // Move to end of Map iteration order (LRU touch)
+    const url = fileUrls.get(file.id);
+    fileUrls.delete(file.id); fileUrls.set(file.id, url);
+    return Promise.resolve(url);
+  }
+  // Dedup: return existing in-flight request for same file
+  if (fileInflight.has(file.id)) return fileInflight.get(file.id);
+  const p = callApi('chatFile', { session: ctx.session, id: file.id }).then((r) => {
     const bin = atob(r.data), arr = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
     const url = URL.createObjectURL(new Blob([arr], { type: r.mime }));
+    // Evict oldest if at capacity
+    if (fileUrls.size >= FILE_CACHE_MAX) {
+      const oldest = fileUrls.keys().next().value;
+      try { URL.revokeObjectURL(fileUrls.get(oldest)); } catch (_) {}
+      fileUrls.delete(oldest);
+    }
     fileUrls.set(file.id, url);
     return url;
-  };
+  }).finally(() => fileInflight.delete(file.id));
+  fileInflight.set(file.id, p);
+  return p;
+}
+
+// Lazy-load images: start fetch only when the element scrolls into view
+const lazyObserver = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver((entries, obs) => {
+  entries.forEach((e) => { if (e.isIntersecting) { obs.unobserve(e.target); e.target._lazyLoad?.(); } });
+}, { rootMargin: '200px' }) : null;
+
+function fileView(file, ctx) {
+  const wrap = h('div', { class: `msg-file msg-file-${file.kind}` });
+  const doLoad = () => fetchFile(file, ctx);
   if (file.kind === 'image') {
     const img = h('img', { alt: 'Photo', class: 'msg-img' });
-    wrap.append(h('span', { class: 'muted-sm' }, '📷 Loading photo…'));
-    load().then((u) => { img.src = u; img.addEventListener('click', () => window.open(u, '_blank')); wrap.replaceChildren(img); })
-      .catch(() => wrap.replaceChildren(h('span', { class: 'muted-sm' }, '📷 Photo could not be loaded.')));
+    const placeholder = h('span', { class: 'muted-sm' }, `📷 Photo${file.size ? ' (' + mb(file.size) + ')' : ''}…`);
+    wrap.append(placeholder);
+    const startLoad = () => {
+      placeholder.textContent = '📷 Loading photo…';
+      doLoad().then((u) => { img.src = u; img.addEventListener('click', () => window.open(u, '_blank')); wrap.replaceChildren(img); })
+        .catch(() => {
+          const retry = h('button', { type: 'button', class: 'msg-file-btn' }, '📷 Photo failed — tap to retry');
+          retry.addEventListener('click', () => { wrap.replaceChildren(placeholder); startLoad(); });
+          wrap.replaceChildren(retry);
+        });
+    };
+    // Lazy: defer loading until scrolled into view (or load immediately if observer unavailable)
+    if (lazyObserver) { wrap._lazyLoad = startLoad; lazyObserver.observe(wrap); } else startLoad();
     return wrap;
   }
   const btn = h('button', { type: 'button', class: 'msg-file-btn' },
@@ -332,7 +375,7 @@ function fileView(file, ctx) {
   btn.addEventListener('click', async () => {
     btn.disabled = true; btn.textContent = 'Loading…';
     try {
-      const u = await load();
+      const u = await doLoad();
       if (file.kind === 'video') wrap.replaceChildren(h('video', { src: u, controls: true, playsinline: true, class: 'msg-video' }));
       else { window.open(u, '_blank'); btn.disabled = false; btn.textContent = `📄 ${file.name}`; }
     } catch { btn.disabled = false; btn.textContent = 'Could not load. Tap to try again.'; }

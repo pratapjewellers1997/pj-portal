@@ -1,7 +1,8 @@
 import './style.css';
-import { callApi } from './api.js';
+import { callApi, clearInflight } from './api.js';
 import { h } from './dom.js';
 import { renderPortal } from './portal.js';
+import { clearWorkMemo } from './workdata.js';
 // Lazy-load chat connection functions — avoids pulling messages.js (and its
 // Firebase dependency) into the main bundle. Firebase loads only when needed.
 const chatModule = () => import('./messages.js');
@@ -40,9 +41,25 @@ const store = {
 function signOut() {
   store.set(SESSION_KEY, null);
   store.set(CACHE_KEY, null);
-  disconnectChatOnSignOut();  // fire-and-forget async cleanup
+  disconnectChatOnSignOut();  // fire-and-forget async cleanup (clears fileUrls, chat state, Firebase auth)
   localStorage.removeItem('pj_chat_used');
   if (window.google?.accounts?.id) google.accounts.id.disableAutoSelect();
+
+  // Clear all module-level caches and state so the next employee gets a clean session
+  clearInflight();
+  clearWorkMemo();
+  // Lazy-loaded modules: reset only if already imported (no-op if never visited)
+  import('./insights.js').then((m) => m.resetInsights()).catch(() => {});
+  import('./vendors.js').then((m) => m.resetVendors()).catch(() => {});
+  import('./checklists.js').then((m) => m.resetChecklists()).catch(() => {});
+  import('./karigar.js').then((m) => m.resetKarigar()).catch(() => {});
+  import('./social.js').then((m) => m.resetSocial()).catch(() => {});
+  import('./search.js').then((m) => m.resetSearch()).catch(() => {});
+  import('./work.js').then((m) => m.resetWork()).catch(() => {});
+  import('./attendance.js').then((m) => m.resetAttendance()).catch(() => {});
+  import('./scores.js').then((m) => m.resetScores()).catch(() => {});
+  import('./board.js').then((m) => m.resetBoard()).catch(() => {});
+
   renderSignIn();
 }
 

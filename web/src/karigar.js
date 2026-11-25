@@ -10,6 +10,8 @@ const DAY = 864e5;
 let memo = null;
 const state = { karigar: 'All' };
 
+export function resetKarigar() { memo = null; state.karigar = 'All'; }
+
 export function loadKarigar(session) {
   if (!memo) memo = callApi('karigar', { session }).catch((e) => { memo = null; throw e; });
   return memo;

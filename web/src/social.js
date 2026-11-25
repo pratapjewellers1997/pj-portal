@@ -5,6 +5,9 @@ import { callApi } from './api.js';
 // One "social" request loads both; posting, "Got it" and kudos are small writes.
 
 let cache = null;
+
+export function resetSocial() { cache = null; }
+
 export function loadSocial(session, fresh = false) {
   if (fresh || !cache) cache = callApi('social', { session }).catch((e) => { cache = null; throw e; });
   return cache;
