@@ -156,7 +156,10 @@ export function sendChatMessage({ me, myName, other, otherName, text, file }) {
     read: { [keyOf(me)]: serverTimestamp() },
   }, { merge: true });
   const msg = { from: me, text: text || '', at: at };
-  if (file) msg.file = { id: file.id, name: file.name, mime: file.mime, size: file.size, kind: file.kind };
+  if (file) {
+    msg.file = { id: file.id, name: file.name, mime: file.mime, size: file.size, kind: file.kind };
+    if (file.thumb) msg.file.thumb = file.thumb;
+  }
   batch.set(doc(collection(db, 'chats', id, 'messages')), msg);
   return batch.commit();
 }

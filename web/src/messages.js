@@ -301,8 +301,14 @@ function renderThread(root, ctx, other) {
       if (prepared.blob.size > LIMITS[kind] * 1048576) throw new Error('file_too_big');
       status.textContent = `Uploading ${kind === 'image' ? 'photo' : kind} (${mb(prepared.blob.size)})…`;
       const data = await toBase64(prepared.blob);
+      // Generate thumbnail while uploading (parallel: don't block upload)
+      const thumbPromise = kind === 'image' ? makeThumbnail(prepared.blob)
+        : kind === 'video' ? videoThumbnail(f) : Promise.resolve(null);
       const up = await callApi('chatUpload', { session: ctx.session, to: other, name: prepared.name, mime: prepared.mime, data });
       fileUrls.set(up.file.id, URL.createObjectURL(prepared.blob));
+      // Attach thumbnail to file metadata before writing to Firestore
+      const thumb = await thumbPromise;
+      if (thumb) up.file.thumb = thumb;
       const caption = box.value.trim();
       box.value = '';
       await deliver(caption, up.file);
@@ -353,35 +359,119 @@ const lazyObserver = typeof IntersectionObserver !== 'undefined' ? new Intersect
 function fileView(file, ctx) {
   const wrap = h('div', { class: `msg-file msg-file-${file.kind}` });
   const doLoad = () => fetchFile(file, ctx);
+
+  /* ---- Images ---- */
   if (file.kind === 'image') {
+    // Thumbnail available: show instantly, load full-res only on tap
+    if (file.thumb) {
+      const img = h('img', { alt: 'Photo', class: 'msg-img msg-thumb', src: `data:image/jpeg;base64,${file.thumb}` });
+      img.addEventListener('click', () => openLightbox(file, ctx));
+      wrap.append(img);
+      return wrap;
+    }
+    // No thumbnail (old message): lazy-load full image as before
     const img = h('img', { alt: 'Photo', class: 'msg-img' });
     const placeholder = h('span', { class: 'muted-sm' }, `📷 Photo${file.size ? ' (' + mb(file.size) + ')' : ''}…`);
     wrap.append(placeholder);
     const startLoad = () => {
       placeholder.textContent = '📷 Loading photo…';
-      doLoad().then((u) => { img.src = u; img.addEventListener('click', () => window.open(u, '_blank')); wrap.replaceChildren(img); })
+      doLoad().then((u) => { img.src = u; img.addEventListener('click', () => openLightbox(file, ctx)); wrap.replaceChildren(img); })
         .catch(() => {
           const retry = h('button', { type: 'button', class: 'msg-file-btn' }, '📷 Photo failed — tap to retry');
           retry.addEventListener('click', () => { wrap.replaceChildren(placeholder); startLoad(); });
           wrap.replaceChildren(retry);
         });
     };
-    // Lazy: defer loading until scrolled into view (or load immediately if observer unavailable)
     if (lazyObserver) { wrap._lazyLoad = startLoad; lazyObserver.observe(wrap); } else startLoad();
     return wrap;
   }
-  const btn = h('button', { type: 'button', class: 'msg-file-btn' },
-    file.kind === 'video' ? `▶ Play video (${mb(file.size)})` : `📄 ${file.name} (${mb(file.size)})`);
+
+  /* ---- Videos ---- */
+  if (file.kind === 'video') {
+    if (file.thumb) {
+      const poster = h('div', { class: 'msg-vid-poster' },
+        h('img', { alt: 'Video', class: 'msg-img msg-thumb', src: `data:image/jpeg;base64,${file.thumb}` }),
+        h('span', { class: 'msg-play' }, '▶'),
+        h('span', { class: 'msg-fsize' }, mb(file.size)));
+      const loadVideo = async () => {
+        poster.replaceChildren(h('span', { class: 'muted-sm' }, '🎬 Loading video…'));
+        try {
+          const u = await doLoad();
+          wrap.replaceChildren(h('video', { src: u, controls: true, playsinline: true, class: 'msg-video' }));
+        } catch {
+          poster.replaceChildren(h('span', { class: 'muted-sm' }, '🎬 Could not load. Tap to retry.'));
+          poster.addEventListener('click', loadVideo, { once: true });
+        }
+      };
+      poster.addEventListener('click', loadVideo, { once: true });
+      wrap.append(poster);
+      return wrap;
+    }
+    // No poster frame (old message)
+    const btn = h('button', { type: 'button', class: 'msg-file-btn' }, `🎬 Video (${mb(file.size)})`);
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = '🎬 Loading video…';
+      try { wrap.replaceChildren(h('video', { src: await doLoad(), controls: true, playsinline: true, class: 'msg-video' })); }
+      catch { btn.disabled = false; btn.textContent = '🎬 Could not load. Tap to retry.'; }
+    });
+    wrap.append(btn);
+    return wrap;
+  }
+
+  /* ---- PDFs / other documents ---- */
+  const btn = h('button', { type: 'button', class: 'msg-file-btn' }, `📄 ${file.name} (${mb(file.size)})`);
   btn.addEventListener('click', async () => {
-    btn.disabled = true; btn.textContent = 'Loading…';
+    btn.disabled = true; btn.textContent = '📄 Opening…';
     try {
       const u = await doLoad();
-      if (file.kind === 'video') wrap.replaceChildren(h('video', { src: u, controls: true, playsinline: true, class: 'msg-video' }));
-      else { window.open(u, '_blank'); btn.disabled = false; btn.textContent = `📄 ${file.name}`; }
-    } catch { btn.disabled = false; btn.textContent = 'Could not load. Tap to try again.'; }
+      if (file.mime === 'application/pdf') openPdfViewer(u, file.name);
+      else window.open(u, '_blank');
+      btn.disabled = false; btn.textContent = `📄 ${file.name} (${mb(file.size)})`;
+    } catch { btn.disabled = false; btn.textContent = '📄 Could not load. Tap to retry.'; }
   });
   wrap.append(btn);
   return wrap;
+}
+
+/* ---------- In-portal lightbox for photos ---------- */
+
+function openLightbox(file, ctx) {
+  const existing = document.querySelector('.msg-lb');
+  if (existing) existing.remove();
+
+  const hasFull = fileUrls.has(file.id);
+  const fullSrc = hasFull ? fileUrls.get(file.id) : null;
+  const thumbSrc = file.thumb ? `data:image/jpeg;base64,${file.thumb}` : null;
+  const img = h('img', { class: 'msg-lb-img', alt: file.name || 'Photo', src: fullSrc || thumbSrc || '' });
+  const info = h('span', { class: 'msg-lb-info' }, hasFull ? '' : 'Loading full photo…');
+  const close = h('button', { class: 'msg-lb-x', 'aria-label': 'Close' }, '✕');
+  const lb = h('div', { class: 'msg-lb', role: 'dialog', 'aria-modal': 'true' }, close, img, info);
+
+  close.addEventListener('click', () => lb.remove());
+  lb.addEventListener('click', (e) => { if (e.target === lb) lb.remove(); });
+  const esc = (e) => { if (e.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', esc); } };
+  document.addEventListener('keydown', esc);
+  document.body.append(lb);
+
+  if (!hasFull) {
+    fetchFile(file, ctx).then((u) => { img.src = u; info.textContent = ''; })
+      .catch(() => { info.textContent = 'Could not load full photo.'; });
+  }
+}
+
+/* ---------- In-portal PDF viewer ---------- */
+
+function openPdfViewer(blobUrl, name) {
+  const existing = document.querySelector('.msg-lb');
+  if (existing) existing.remove();
+  const iframe = h('iframe', { class: 'msg-lb-pdf', src: blobUrl, title: name || 'PDF' });
+  const close = h('button', { class: 'msg-lb-x', 'aria-label': 'Close' }, '✕');
+  const lb = h('div', { class: 'msg-lb', role: 'dialog', 'aria-modal': 'true' }, close, iframe);
+  close.addEventListener('click', () => lb.remove());
+  lb.addEventListener('click', (e) => { if (e.target === lb) lb.remove(); });
+  const esc = (e) => { if (e.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', esc); } };
+  document.addEventListener('keydown', esc);
+  document.body.append(lb);
 }
 
 function shrinkImage(file) {
@@ -397,6 +487,59 @@ function shrinkImage(file) {
     };
     img.onerror = () => resolve({ blob: file, name: file.name, mime: file.type });
     img.src = URL.createObjectURL(file);
+  });
+}
+
+/** Generate a small JPEG thumbnail (max 200px) from an image blob. Returns Base64 string or null. */
+function makeThumbnail(blob, maxPx = 200) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob((b) => {
+        URL.revokeObjectURL(img.src);
+        if (!b) { resolve(null); return; }
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(',')[1] || null);
+        r.onerror = () => resolve(null);
+        r.readAsDataURL(b);
+      }, 'image/jpeg', 0.5);
+    };
+    img.onerror = () => { URL.revokeObjectURL(img.src); resolve(null); };
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
+/** Extract a poster frame from a video blob as a small JPEG thumbnail. Returns Base64 string or null. */
+function videoThumbnail(blob, maxPx = 200) {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.muted = true; video.playsInline = true; video.preload = 'auto';
+    const url = URL.createObjectURL(blob);
+    let done = false;
+    const finish = (result) => { if (done) return; done = true; URL.revokeObjectURL(url); resolve(result); };
+    video.addEventListener('seeked', () => {
+      try {
+        const scale = Math.min(1, maxPx / Math.max(video.videoWidth || 1, video.videoHeight || 1));
+        const c = document.createElement('canvas');
+        c.width = Math.round((video.videoWidth || 320) * scale); c.height = Math.round((video.videoHeight || 240) * scale);
+        c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+        c.toBlob((b) => {
+          if (!b) { finish(null); return; }
+          const r = new FileReader();
+          r.onload = () => finish(String(r.result).split(',')[1] || null);
+          r.onerror = () => finish(null);
+          r.readAsDataURL(b);
+        }, 'image/jpeg', 0.5);
+      } catch { finish(null); }
+    });
+    video.addEventListener('loadeddata', () => { video.currentTime = Math.min(1, (video.duration || 2) * 0.1); });
+    video.addEventListener('error', () => finish(null));
+    setTimeout(() => finish(null), 6000); // timeout: don't block upload on slow devices
+    video.src = url;
   });
 }
 
